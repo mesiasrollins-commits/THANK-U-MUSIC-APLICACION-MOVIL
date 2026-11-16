@@ -11,12 +11,14 @@ import 'auth_service.dart';
 class PostService {
   /// Descarga la lista de publicaciones enviando el token del usuario.
   Future<List<Map<String, dynamic>>> obtenerPublicaciones(
-    String tokenSesion,
-  ) async {
+    String tokenSesion, {
+    bool soloMias = false,
+  }) async {
+    final ruta = soloMias ? '/publicaciones/mias' : '/publicaciones';
     // Hace la petición GET con el token de autorización y un límite de espera de 10 segundos.
     final respuesta = await http
         .get(
-          Uri.parse('http://127.0.0.1:8000/publicaciones'),
+          Uri.parse('http://127.0.0.1:8000$ruta'),
           headers: {'Authorization': 'Bearer $tokenSesion'},
         )
         .timeout(const Duration(seconds: 10));
@@ -50,6 +52,7 @@ class PostService {
     required String contenido,
     required String etiqueta,
     required List<int> portada,
+    String estado = 'publicada',
   }) async {
     // Crea una petición especial de tipo 'MultipartRequest', necesaria cuando se envían textos y archivos juntos en un mismo formulario.
     final solicitud = http.MultipartRequest(
@@ -65,6 +68,7 @@ class PostService {
       'titulo': titulo,
       'contenido': contenido,
       'tags': etiqueta,
+      'estado': estado,
     });
 
     // Adjunta los bytes de la imagen bajo el campo 'imagen'; FastAPI detectará el formato real y le pondrá un nombre único.
@@ -94,5 +98,60 @@ class PostService {
 
     // Si no venía un mensaje específico del servidor, lanza un aviso general de fallo.
     throw StateError('No se pudo crear la publicación.');
+  }
+  // Envía los cambios de una publicación existente.
+  Future<void> editarPublicacion({
+    required int idPublicacion,
+    required String tokenSesion,
+    required String titulo,
+    required String contenido,
+    required String etiqueta,
+    bool publicar = false,
+    List<int>? portada,
+  }) async {
+    // Prepara una petición de formulario con archivos (MultipartRequest) usando el método PATCH hacia la ruta de esa publicación específica.
+    final solicitud = http.MultipartRequest(
+      'PATCH',
+      Uri.parse('http://127.0.0.1:8000/publicaciones/$idPublicacion'),
+    );
+
+    // Agrega el token de sesión en la cabecera y carga los campos de texto actualizados (convirtiendo 'publicar' a texto).
+    solicitud.headers['Authorization'] = 'Bearer $tokenSesion';
+    solicitud.fields.addAll({
+      'titulo': titulo,
+      'contenido': contenido,
+      'tags': etiqueta,
+      'publicar': publicar.toString(),
+    });
+
+    // Solo adjuntamos un archivo si el administrador eligió otra portada.
+    if (portada != null) {
+      solicitud.files.add(
+        http.MultipartFile.fromBytes('imagen', portada, filename: 'portada'),
+      );
+    }
+
+    // Envía la solicitud al servidor, espera la respuesta completa y corta la espera si tarda más de 30 segundos.
+    final respuesta = await solicitud
+        .send()
+        .then(http.Response.fromStream)
+        .timeout(const Duration(seconds: 30));
+
+    // Si el servidor indica que el permiso venció (código 401), lanza la excepción para regresar al inicio de sesión.
+    if (respuesta.statusCode == 401) {
+      throw SesionInvalida();
+    }
+
+    // Si el servidor responde con éxito (código 200), termina la función sin hacer nada más.
+    if (respuesta.statusCode == 200) return;
+
+    // Mostramos el mensaje de FastAPI si la API devolvió uno.
+    final datos = jsonDecode(utf8.decode(respuesta.bodyBytes));
+    if (datos is Map<String, dynamic> && datos['detail'] is String) {
+      throw StateError(datos['detail'] as String);
+    }
+
+    // Si el servidor falló sin enviar un mensaje específico, lanza un error general.
+    throw StateError('No se pudieron guardar los cambios.');
   }
 }

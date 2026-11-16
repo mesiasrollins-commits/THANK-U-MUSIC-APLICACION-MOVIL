@@ -10,6 +10,8 @@ class PostCard extends StatelessWidget {
     required this.resumen,
     this.portada,
     this.alLeer,
+    this.alEditar,
+    this.alModerar,
   });
 
   // Título principal de la publicación.
@@ -20,6 +22,8 @@ class PostCard extends StatelessWidget {
   final Widget? portada;
   // Función opcional que se ejecuta cuando el usuario toca 'Leer publicación'.
   final VoidCallback? alLeer;
+  final VoidCallback? alEditar;
+  final VoidCallback? alModerar;
 
   // Define el color rojo institucional reutilizable dentro de la tarjeta.
   static const rojo = Color(0xFFB50020);
@@ -33,9 +37,7 @@ class PostCard extends StatelessWidget {
       elevation: 2,
       // Recorta cualquier contenido interno (como la imagen superior) para que respete los bordes redondeados de la tarjeta.
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       // Organiza la imagen arriba y los textos abajo en una columna que ocupa todo el ancho disponible.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -44,7 +46,8 @@ class PostCard extends StatelessWidget {
           SizedBox(
             height: 150,
             // Si 'portada' tiene contenido la muestra; si es nula ('??'), dibuja un fondo rosado con un icono centrado de imagen.
-            child: portada ??
+            child:
+                portada ??
                 const ColoredBox(
                   color: Color(0xFFFBD7DF),
                   child: Center(
@@ -72,15 +75,37 @@ class PostCard extends StatelessWidget {
                 // Muestra el resumen limitado a un máximo de 2 líneas, cortando el texto sobrante con puntos suspensivos ('...').
                 Text(resumen, maxLines: 2, overflow: TextOverflow.ellipsis),
                 // Botón con icono y texto que dispara la función 'alLeer' al ser presionado, sin margen horizontal extra para alinearse a la izquierda.
-                TextButton.icon(
-                  onPressed: alLeer,
-                  style: TextButton.styleFrom(
-                    foregroundColor: rojo,
-                    padding: EdgeInsets.zero,
+                if (alEditar != null || alModerar != null)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (alModerar != null)
+                        IconButton(
+                          tooltip: 'Moderar comentarios',
+                          icon: const Icon(
+                            Icons.chat_bubble_outline,
+                            color: rojo,
+                          ),
+                          onPressed: alModerar,
+                        ),
+                      if (alEditar != null)
+                        IconButton(
+                          tooltip: 'Editar publicación',
+                          icon: const Icon(Icons.edit_outlined, color: rojo),
+                          onPressed: alEditar,
+                        ),
+                    ],
+                  )
+                else
+                  TextButton.icon(
+                    onPressed: alLeer,
+                    style: TextButton.styleFrom(
+                      foregroundColor: rojo,
+                      padding: EdgeInsets.zero,
+                    ),
+                    icon: const Icon(Icons.article_outlined, size: 18),
+                    label: const Text('Leer publicación'),
                   ),
-                  icon: const Icon(Icons.article_outlined, size: 18),
-                  label: const Text('Leer publicación'),
-                ),
               ],
             ),
           ),

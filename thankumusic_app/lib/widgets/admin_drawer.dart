@@ -8,6 +8,7 @@ class AdminDrawer extends StatelessWidget {
     required this.correo,
     required this.onAgregarPublicacion,
     required this.onCerrarSesion,
+    required this.onEditarPublicaciones,
   });
 
   // Guarda el correo electrónico que se mostrará en la cabecera del menú.
@@ -15,6 +16,8 @@ class AdminDrawer extends StatelessWidget {
   final VoidCallback onAgregarPublicacion;
   // Función sin retorno que dispara el proceso de cierre de sesión al tocar la última opción.
   final VoidCallback onCerrarSesion;
+  final VoidCallback onEditarPublicaciones;
+
 
   // Define el color rojo institucional reutilizable para iconos, bordes y textos destacados dentro de este menú.
   static const rojo = Color(0xFFB50020);
@@ -69,7 +72,7 @@ class AdminDrawer extends StatelessWidget {
             'Agregar publicación',
             onTap: onAgregarPublicacion,
           ),
-          opcion(Icons.edit_outlined, 'Editar publicaciones'),
+          opcion(Icons.edit_outlined, 'Editar publicaciones',onTap: onEditarPublicaciones),
           // Última opción que ejecuta la función 'onCerrarSesion' al ser presionada.
           opcion(Icons.logout, 'Cerrar sesión', onTap: onCerrarSesion),
         ],

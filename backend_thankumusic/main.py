@@ -42,7 +42,7 @@ app = FastAPI(title="API Thank U Music")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8080"],
-    allow_methods=["POST", "GET"],
+    allow_methods=["*"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -345,6 +345,48 @@ def listar_publicaciones():
 
     return publicaciones
 
+def publicaciones_con_portada(filas):
+    url_base = getenv("PORTADAS_BASE_URL", "").rstrip("/")
+    publicaciones = []
+
+    for fila in filas:
+        publicacion = dict(fila)
+        imagen = publicacion["imagen"]
+        publicacion["imagen_url"] = (
+            f"{url_base}/{quote(imagen, safe='')}" if url_base and imagen else None
+        )
+        publicaciones.append(publicacion)
+
+    return publicaciones
+
+# Ruta GET para obtener únicamente las publicaciones creadas por el administrador que tiene la sesión iniciada.
+@app.get("/publicaciones/mias")
+def listar_mis_publicaciones(sesion: dict = Depends(consultar_sesion)):
+    # Verifica que el usuario tenga rol de administrador; si no, bloquea el acceso (error 403).
+    if sesion["rol"] != "administrador":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo un administrador puede consultar esta lista.",
+        )
+
+    # Abre una conexión de lectura a la base de datos.
+    with engine.connect() as conexion:
+        # Busca todas las publicaciones del usuario conectado que estén en borrador o publicadas, ordenadas de la más reciente a la más antigua.
+        filas = conexion.execute(
+            text("""
+                SELECT id_publicacion, titulo, contenido, imagen, tags,
+                       estado, fecha_publicacion
+                FROM publicaciones
+                WHERE id_autor = :id_autor
+                  AND estado IN ('borrador', 'publicada')
+                ORDER BY fecha_publicacion DESC, id_publicacion DESC
+            """),
+            {"id_autor": sesion["id_usuario"]},
+        ).mappings().all()
+
+    # Agrega la ruta completa de la imagen de portada a cada resultado y devuelve la lista final.
+    return publicaciones_con_portada(filas)
+
 # Define un endpoint GET en FastAPI que recibe el ID de una publicación en la ruta y exige que la sesión sea válida ('consultar_sesion') antes de ejecutar la función.
 @app.get(
     "/publicaciones/{id_publicacion}/comentarios",
@@ -426,87 +468,188 @@ def crear_comentario(
     # Confirma a la aplicación móvil que el comentario se guardó correctamente.
     return {"mensaje": "Comentario publicado."}
 
-# Ruta POST para crear una publicación nueva recibiendo campos de formulario y un archivo de imagen; devuelve código 201 al completarse.
+# Revisa que el título, el contenido y la etiqueta cumplan con las reglas antes de guardar o actualizar una publicación.
+def validar_datos_publicacion(titulo: str, contenido: str, tags: str):
+    # Quita los espacios en blanco sobrantes al inicio y al final del título y de la etiqueta.
+    titulo = titulo.strip()
+    tags = tags.strip()
+
+    # Comprueba que el título no quede vacío ni supere los 200 caracteres; si falla, detiene el proceso (error 422).
+    if not titulo or len(titulo) > 200:
+        raise HTTPException(status_code=422, detail="Escribe un título de hasta 200 caracteres.")
+
+    # Comprueba que el contenido tenga texto real y no rebase los 15,000 caracteres.
+    if not contenido.strip() or len(contenido) > 15000:
+        raise HTTPException(status_code=422, detail="Escribe un contenido de hasta 15 000 caracteres.")
+
+    # Lista cerrada de etiquetas permitidas; si envían otra distinta, devuelve un error de validación (422).
+    etiquetas = ("analisis", "resena", "recomendacion", "Aviso", "Conciertos")
+    if tags not in etiquetas:
+        raise HTTPException(status_code=422, detail="Selecciona una etiqueta válida.")
+
+    # Devuelve el título y la etiqueta ya limpios de espacios extra para guardarlos en la base de datos.
+    return titulo, tags
+
+
+def guardar_portada_publicacion(imagen: UploadFile) -> Path:
+    directorio = getenv("PORTADAS_DIRECTORIO", "")
+    if not directorio or not Path(directorio).is_dir():
+        raise HTTPException(
+            status_code=500,
+            detail="Revisa la carpeta compartida de portadas.",
+        )
+
+    # Detectamos el formato real de la imagen y corregimos su orientación.
+    extensiones = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
+
+    try:
+        with Image.open(imagen.file, formats=list(extensiones)) as portada:
+            formato = portada.format
+            portada_lista = ImageOps.exif_transpose(portada)
+    except (OSError, ValueError, Image.DecompressionBombError) as error:
+        raise HTTPException(
+            status_code=422,
+            detail="Selecciona una imagen JPG, PNG o WebP válida.",
+        ) from error
+
+    ruta = Path(directorio) / (uuid4().hex + extensiones[formato])
+
+    try:
+        with portada_lista:
+            portada_lista.save(ruta, format=formato)
+    except (OSError, ValueError) as error:
+        ruta.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo guardar la portada.",
+        ) from error
+
+    return ruta
+
 @app.post("/publicaciones", status_code=201)
 def crear_publicacion(
     titulo: str = Form(...),
     contenido: str = Form(...),
     tags: str = Form(...),
     imagen: UploadFile = File(...),
+    estado: str = Form("publicada"),
     sesion: dict = Depends(consultar_sesion),
 ):
-    # Verifica que el usuario conectado tenga permiso de administrador; si no, bloquea la acción (error 403).
     if sesion["rol"] != "administrador":
-        raise HTTPException(status_code=403, detail="Solo un administrador puede publicar.")
-
-    # Quita los espacios en blanco sobrantes al inicio y al final del título y de la etiqueta.
-    titulo = titulo.strip()
-    tags = tags.strip()
-
-    # Revisa que el título no quede vacío y que no pase de 200 letras.
-    if not titulo or len(titulo) > 200:
-        raise HTTPException(status_code=422, detail="Escribe un título de hasta 200 caracteres.")
-
-    # Revisa que el contenido tenga texto y no rebase el límite de 15,000 caracteres.
-    if not contenido.strip() or len(contenido) > 15000:
-        raise HTTPException(status_code=422, detail="Escribe un contenido de hasta 15 000 caracteres.")
-
-    # Lista cerrada de categorías permitidas; si envían otra distinta, detiene el proceso (error 422).
-    etiquetas = ("analisis", "resena", "recomendacion", "Aviso", "Conciertos")
-    if tags not in etiquetas:
-        raise HTTPException(status_code=422, detail="Selecciona una etiqueta válida.")
-
-    # Obtiene desde la configuración del sistema la carpeta donde se guardarán las portadas y comprueba que realmente exista.
-    directorio = getenv("PORTADAS_DIRECTORIO", "")
-    if not directorio or not Path(directorio).is_dir():
-        raise HTTPException(status_code=500, detail="Revisa la carpeta compartida de portadas.")
-
-    # Intenta abrir el archivo subido aceptando únicamente JPG, PNG o WebP y endereza la foto si viene girada desde el celular.
-    extensiones = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
-    try:
-        with Image.open(imagen.file, formats=list(extensiones)) as portada:
-            formato = portada.format
-            portada_lista = ImageOps.exif_transpose(portada)
-    except (OSError, ValueError, Image.DecompressionBombError) as error:
-        # Si el archivo está dañado, es demasiado pesado o no es una imagen permitida, devuelve un error de validación (422).
         raise HTTPException(
-            status_code=422,
-            detail="Selecciona una imagen JPG, PNG o WebP válida.",
-        ) from error
+            status_code=403,
+            detail="Solo un administrador puede publicar.",
+        )
 
-    # Genera un nombre aleatorio único (para no sobrescribir fotos anteriores) con su extensión correcta y arma la ruta final.
-    nombre_imagen = uuid4().hex + extensiones[formato]
-    ruta_imagen = Path(directorio) / nombre_imagen
+    if estado not in ("borrador", "publicada"):
+        raise HTTPException(status_code=422, detail="Elige un estado válido.")
+
+    titulo, tags = validar_datos_publicacion(titulo, contenido, tags)
+    ruta_imagen = guardar_portada_publicacion(imagen)
 
     try:
-        # Guarda la imagen ya procesada dentro de la carpeta compartida del servidor.
-        with portada_lista:
-            portada_lista.save(ruta_imagen, format=formato)
-
-        # Abre una conexión segura a la base de datos y registra los datos de la publicación junto con el nombre de su imagen.
         with engine.begin() as conexion:
             resultado = conexion.execute(
                 text("""
                     INSERT INTO publicaciones
-                        (titulo, contenido, imagen, tags, id_autor)
+                        (titulo, contenido, imagen, tags, id_autor, estado)
                     VALUES
-                        (:titulo, :contenido, :imagen, :tags, :id_autor)
+                        (:titulo, :contenido, :imagen, :tags, :id_autor, :estado)
                 """),
                 {
                     "titulo": titulo,
                     "contenido": contenido,
-                    "imagen": nombre_imagen,
+                    "imagen": ruta_imagen.name,
                     "tags": tags,
                     "id_autor": sesion["id_usuario"],
+                    "estado": estado,
                 },
             )
-            # Recupera el número de identificación (ID) que la base de datos le asignó a esta nueva publicación.
             id_publicacion = resultado.lastrowid
-
-    except (OSError, SQLAlchemyError) as error:
-        # Si algo falla al guardar el archivo o al insertar en la base de datos, borra la imagen que se alcanzó a crear para no dejar basura.
+    except SQLAlchemyError as error:
         ruta_imagen.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail="No se pudo guardar la publicación.") from error
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo guardar la publicación.",
+        ) from error
 
-    # Devuelve el ID recién creado y un mensaje de confirmación a la aplicación.
     return {"id_publicacion": id_publicacion, "mensaje": "Publicación creada."}
+
+# Ruta PATCH para editar una publicación existente por su ID, aceptando textos y opcionalmente una nueva imagen de portada.
+@app.patch("/publicaciones/{id_publicacion}")
+def editar_publicacion(
+    id_publicacion: int,
+    titulo: str = Form(...),
+    contenido: str = Form(...),
+    tags: str = Form(...),
+    publicar: bool = Form(False),
+    imagen: UploadFile | None = File(None),
+    sesion: dict = Depends(consultar_sesion),
+):
+    # Verifica que el usuario conectado tenga rol de administrador; si no, bloquea la edición (error 403).
+    if sesion["rol"] != "administrador":
+        raise HTTPException(status_code=403, detail="Solo un administrador puede editar.")
+
+    # Valida longitud y formato del título, contenido y etiqueta antes de tocar la base de datos.
+    titulo, tags = validar_datos_publicacion(titulo, contenido, tags)
+    # Variable para guardar la ruta del nuevo archivo de imagen si es que el usuario subió uno.
+    ruta_nueva = None
+
+    try:
+        # Abre una transacción segura en la base de datos que guarda todo al final o revierte si algo falla.
+        with engine.begin() as conexion:
+            # Comprobamos que la publicación pertenezca al administrador conectado.
+            estado_actual = conexion.execute(
+                text("""
+                    SELECT estado FROM publicaciones
+                    WHERE id_publicacion = :id AND id_autor = :autor
+                      AND estado IN ('borrador', 'publicada')
+                    FOR UPDATE
+                """),
+                {"id": id_publicacion, "autor": sesion["id_usuario"]},
+            ).scalar_one_or_none()
+
+            # Si no existe esa publicación o pertenece a otro autor, devuelve error 404.
+            if estado_actual is None:
+                raise HTTPException(status_code=404, detail="No se encontró la publicación.")
+
+            # Si el usuario envió una nueva imagen de portada, la valida y la guarda en el servidor.
+            if imagen is not None:
+                ruta_nueva = guardar_portada_publicacion(imagen)
+
+            # Determina si se está pasando un borrador a estado publicado por primera vez.
+            publicar_borrador = publicar and estado_actual == "borrador"
+            estado = "publicada" if publicar_borrador else estado_actual
+
+            # Actualiza los datos; 'COALESCE' mantiene la imagen anterior si no se subió una nueva, y la fecha solo cambia al publicar un borrador.
+            conexion.execute(
+                text("""
+                    UPDATE publicaciones
+                    SET titulo = :titulo, contenido = :contenido, tags = :tags,
+                        imagen = COALESCE(:imagen, imagen),
+                        estado = :estado,
+                        fecha_publicacion = CASE
+                            WHEN :publicar_borrador THEN CURRENT_TIMESTAMP
+                            ELSE fecha_publicacion
+                        END
+                    WHERE id_publicacion = :id AND id_autor = :autor
+                """),
+                {
+                    "titulo": titulo,
+                    "contenido": contenido,
+                    "tags": tags,
+                    "imagen": ruta_nueva.name if ruta_nueva else None,
+                    "estado": estado,
+                    "publicar_borrador": publicar_borrador,
+                    "id": id_publicacion,
+                    "autor": sesion["id_usuario"],
+                },
+            )
+    except SQLAlchemyError as error:
+        # Si falla la actualización en la base de datos y se alcanzó a guardar una imagen nueva, la borra para no dejar archivos sueltos.
+        if ruta_nueva is not None:
+            ruta_nueva.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail="No se pudieron guardar los cambios.") from error
+
+    # Devuelve confirmación y el estado final con el que quedó guardada la publicación.
+    return {"mensaje": "Cambios guardados.", "estado": estado}

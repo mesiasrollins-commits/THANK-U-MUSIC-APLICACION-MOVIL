@@ -17,12 +17,15 @@ class AddBlogPage extends StatefulWidget {
     required this.registrarActividad,
     required this.tokenSesion,
     required this.volverAlLogin,
+    this.publicacion,
   });
 
   // Función asíncrona que avisa al servidor que el administrador sigue usando la pantalla.
   final Future<void> Function(BuildContext) registrarActividad;
   final String tokenSesion;
   final void Function(BuildContext, {String? aviso}) volverAlLogin;
+  // Si recibimos una publicación, abrimos el formulario en modo edición.
+  final Map<String, dynamic>? publicacion;
 
   @override
   State<AddBlogPage> createState() => _AddBlogPageState();
@@ -49,36 +52,39 @@ class _AddBlogPageState extends State<AddBlogPage> {
   }
 
   Future<void> confirmarCancelacion() async {
-    final descartar = await showDialog<bool>(
+    final opcion = await showDialog<String>(
       context: context,
       builder: (contextoDialogo) => AlertDialog(
-        title: const Text('¿Estás seguro?'),
-        content: const Text(
-          'Si descartas la publicación, perderás los cambios.',
-        ),
+        title: const Text('¿Qué quieres hacer con esta publicación?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(contextoDialogo).pop(false),
+            onPressed: () => Navigator.of(contextoDialogo).pop(),
             child: const Text('Continuar'),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(contextoDialogo).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: rojo,
-              foregroundColor: Colors.white,
+          if (widget.publicacion == null)
+            OutlinedButton(
+              onPressed: () => Navigator.of(contextoDialogo).pop('borrador'),
+              child: const Text('Guardar como borrador'),
             ),
+          TextButton(
+            onPressed: () => Navigator.of(contextoDialogo).pop('descartar'),
             child: const Text('Descartar'),
           ),
         ],
       ),
     );
 
-    if (!mounted || descartar != true) return;
-    Navigator.of(context).pop();
+    if (!mounted) return;
+
+    if (opcion == 'borrador') {
+      await publicar(estado: 'borrador');
+    } else if (opcion == 'descartar') {
+      Navigator.of(context).pop();
+    }
   }
 
   // Revisa que todos los datos estén completos, envía la publicación al servidor y cierra la pantalla si todo salió bien.
-  Future<void> publicar() async {
+  Future<void> publicar({String estado = 'publicada'}) async {
     // Si ya hay una publicación enviándose en este momento, detiene la función para evitar duplicados.
     if (_publicando) return;
 
@@ -87,15 +93,16 @@ class _AddBlogPageState extends State<AddBlogPage> {
     final contenido = _contenidoController.text;
     final etiqueta = _etiqueta;
     final portada = _portada;
+    final publicacion = widget.publicacion;
 
-    // Comprueba que no falte ningún dato obligatorio (título, contenido, etiqueta ni imagen); si falta algo, avisa y cancela el envío.
-    if (titulo.isEmpty ||
-        contenido.trim().isEmpty ||
-        etiqueta == null ||
-        portada == null) {
-      mostrarAviso(
-        'Completa el título, el contenido, la etiqueta y la portada.',
-      );
+    if (titulo.isEmpty || contenido.trim().isEmpty || etiqueta == null) {
+      mostrarAviso('Completa el título, el contenido y la etiqueta.');
+      return;
+    }
+
+    // La portada es obligatoria al crear. En edición podemos usar la que ya está guardada.
+    if (publicacion == null && portada == null) {
+      mostrarAviso('Agrega una portada.');
       return;
     }
 
@@ -106,13 +113,30 @@ class _AddBlogPageState extends State<AddBlogPage> {
 
     try {
       // Llama al servicio para subir los textos y la imagen al servidor FastAPI.
-      await PostService().crearPublicacion(
-        tokenSesion: widget.tokenSesion,
-        titulo: titulo,
-        contenido: contenido,
-        etiqueta: etiqueta,
-        portada: portada,
-      );
+      final servicio = PostService();
+
+      if (publicacion == null) {
+        // Crea una entrada nueva con el estado elegido en el formulario.
+        await servicio.crearPublicacion(
+          tokenSesion: widget.tokenSesion,
+          titulo: titulo,
+          contenido: contenido,
+          etiqueta: etiqueta,
+          portada: portada!,
+          estado: estado,
+        );
+      } else {
+        // Actualiza la entrada existente. Si era borrador, la publica.
+        await servicio.editarPublicacion(
+          idPublicacion: publicacion['id_publicacion'] as int,
+          tokenSesion: widget.tokenSesion,
+          titulo: titulo,
+          contenido: contenido,
+          etiqueta: etiqueta,
+          publicar: publicacion['estado'] == 'borrador',
+          portada: portada,
+        );
+      }
     } on SesionInvalida {
       // Si el servidor avisa que la sesión caducó, regresa al usuario al inicio de sesión y detiene la función.
       if (mounted) {
@@ -140,7 +164,7 @@ class _AddBlogPageState extends State<AddBlogPage> {
 
     // Si todo se guardó correctamente y la pantalla sigue abierta, la cierra devolviendo 'true' para que el blog recargue la lista.
     if (!mounted) return;
-    Navigator.of(context).pop(true);
+    Navigator.of(context).pop(estado);
   }
 
   // Abre la galería del dispositivo o explorador de archivos para que el usuario elija una imagen de portada.
@@ -174,6 +198,34 @@ class _AddBlogPageState extends State<AddBlogPage> {
     }
   }
 
+  // Se ejecuta una sola vez al abrir la pantalla para rellenar los campos si se está editando una publicación existente.
+  @override
+  void initState() {
+    super.initState();
+
+    // Revisa si la pantalla recibió una publicación; si es nula (modo crear nuevo), deja los campos vacíos y sale.
+    final publicacion = widget.publicacion;
+    if (publicacion == null) return;
+
+    // Carga el título y el contenido actuales dentro de los cuadros de texto del formulario.
+    _tituloController.text = publicacion['titulo']?.toString() ?? '';
+    _contenidoController.text = publicacion['contenido']?.toString() ?? '';
+
+    // El selector solo puede mostrar valores que estén entre sus opciones.
+    const etiquetas = [
+      'analisis',
+      'resena',
+      'recomendacion',
+      'Aviso',
+      'Conciertos',
+    ];
+    final etiqueta = publicacion['tags']?.toString();
+    // Si la etiqueta guardada coincide con una de las opciones válidas, la deja preseleccionada en el menú desplegable.
+    if (etiquetas.contains(etiqueta)) {
+      _etiqueta = etiqueta;
+    }
+  }
+
   @override
   // Se ejecuta al cerrar esta pantalla para liberar de memoria los controladores de texto.
   void dispose() {
@@ -184,6 +236,17 @@ class _AddBlogPageState extends State<AddBlogPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Verifica si se recibió una publicación previa para saber si la pantalla está en modo edición (true) o creación nueva (false).
+    final esEdicion = widget.publicacion != null;
+    final esBorrador = widget.publicacion?['estado'] == 'borrador';
+    final textoGuardar = esEdicion && !esBorrador
+        ? 'Guardar cambios'
+        : 'Publicar';
+    // Obtiene la dirección web (URL) de la imagen que ya tenía guardada la publicación, si es que existe.
+    final imagenActualUrl = widget.publicacion?['imagen_url']?.toString();
+    // Comprueba si hay una imagen para mostrar, ya sea una foto recién elegida desde el dispositivo ('_portada') o la que ya estaba subida en el servidor ('imagenActualUrl').
+    final hayPortada =
+        _portada != null || (imagenActualUrl?.isNotEmpty ?? false);
     // Envuelve toda la vista para detectar interacciones (toques o desplazamientos) y renovar la sesión.
     return ActividadSesion(
       onActividad: () => widget.registrarActividad(context),
@@ -217,7 +280,7 @@ class _AddBlogPageState extends State<AddBlogPage> {
                       tooltip: 'Volver al blog',
                       icon: const Icon(Icons.arrow_back, color: rojo),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Agregar publicación',
                         style: TextStyle(
@@ -249,7 +312,7 @@ class _AddBlogPageState extends State<AddBlogPage> {
                               fit: StackFit.expand,
                               children: [
                                 // Si todavía no se ha elegido ninguna imagen, muestra un recuadro rosado tocable para seleccionarla.
-                                if (_portada == null)
+                                if (!hayPortada)
                                   Material(
                                     color: const Color(0xFFFBD7DF),
                                     // Detecta el toque sobre todo el recuadro y abre la galería de imágenes.
@@ -277,10 +340,24 @@ class _AddBlogPageState extends State<AddBlogPage> {
                                     ),
                                   )
                                 // Si ya hay una imagen seleccionada, la dibuja directamente desde memoria cubriendo todo el recuadro sin deformarse.
+                                // Si el usuario eligió una imagen nueva desde su dispositivo, la dibuja directamente desde memoria cubriendo el recuadro.
+                                else if (_portada != null)
+                                  Image.memory(_portada!, fit: BoxFit.cover)
+                                // Si no eligió una foto nueva (modo edición), descarga y muestra la imagen que ya estaba guardada en el servidor.
                                 else
-                                  Image.memory(_portada!, fit: BoxFit.cover),
-                                // Si ya existe una portada cargada, coloca un botón blanco en la esquina superior derecha para permitir cambiarla.
-                                if (_portada != null)
+                                  Image.network(
+                                    imagenActualUrl!,
+                                    fit: BoxFit.cover,
+                                    // Usa la etiqueta HTML nativa en navegadores web para evitar bloqueos al cargar imágenes desde el servidor.
+                                    webHtmlElementStrategy:
+                                        WebHtmlElementStrategy.prefer,
+                                    // Si la imagen no se puede descargar o el enlace falla, muestra el ícono de imagen rota centrado.
+                                    errorBuilder: (_, __, ___) => const Center(
+                                      child: Icon(Icons.broken_image_outlined),
+                                    ),
+                                  ),
+                                // Si existe alguna portada visible (nueva o anterior), permite mostrar encima el botón para cambiarla.
+                                if (hayPortada)
                                   Positioned(
                                     top: 8,
                                     right: 8,
@@ -388,7 +465,6 @@ class _AddBlogPageState extends State<AddBlogPage> {
                           spacing: 12,
                           runSpacing: 8,
                           children: [
-                            
                             // Botón con borde rojo para cancelar y regresar a la pantalla anterior; se deshabilita ('null') si ya se está enviando la publicación.
                             OutlinedButton(
                               onPressed: _publicando
@@ -408,8 +484,9 @@ class _AddBlogPageState extends State<AddBlogPage> {
                                 backgroundColor: rojo,
                                 foregroundColor: Colors.white,
                               ),
+                              // Muestra 'Guardando…' mientras los datos se están enviando al servidor; cuando no está guardando, muestra el texto definido en 'textoGuardar'.
                               child: Text(
-                                _publicando ? 'Publicando…' : 'Publicar',
+                                _publicando ? 'Guardando…' : textoGuardar,
                               ),
                             ),
                           ],

@@ -7,6 +7,7 @@ import '../widgets/admin_drawer.dart';
 import '../widgets/post_card.dart';
 
 import 'add_blog_page.dart';
+import 'mis_publicaciones.dart';
 import 'login_user_page.dart';
 import 'post_detail_page.dart';
 
@@ -169,31 +170,62 @@ class _InicioPantallaState extends State<InicioPantalla> {
                     _panelKey.currentState?.closeDrawer();
 
                     // Abre la pantalla 'AddBlogPage' y espera hasta que el usuario regrese de ella; recibe 'true' si sí se creó la publicación.
-                    final publicada = await Navigator.of(context).push<bool>(
-                      MaterialPageRoute(
-                        builder: (_) => AddBlogPage(
-                          registrarActividad: registrarActividad,
-                          tokenSesion: widget.tokenSesion,
-                          volverAlLogin: volverAlLogin,
-                        ),
-                      ),
-                    );
+                    final estadoGuardado = await Navigator.of(context)
+                        .push<String>(
+                          MaterialPageRoute(
+                            builder: (_) => AddBlogPage(
+                              registrarActividad: registrarActividad,
+                              tokenSesion: widget.tokenSesion,
+                              volverAlLogin: volverAlLogin,
+                            ),
+                          ),
+                        );
 
                     // Si la pantalla anterior ya no existe o el usuario regresó sin guardar ('publicada' no es true), no hace nada más.
-                    if (!context.mounted || publicada != true) return;
-
+                    if (!context.mounted || estadoGuardado == null) return;
                     // Vuelve a pedir la lista de publicaciones al servidor y redibuja la pantalla para mostrar la nueva entrada.
                     final publicacionesActualizadas = cargarPublicaciones();
                     setState(() {
                       _publicaciones = publicacionesActualizadas;
                     });
 
-                    // Muestra un mensaje corto en la parte inferior confirmando que la publicación se creó con éxito.
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Publicación creada.')),
+                      SnackBar(
+                        content: Text(
+                          estadoGuardado == 'borrador'
+                              ? 'Borrador guardado.'
+                              : 'Publicación creada.',
+                        ),
+                      ),
                     );
                   },
-                  
+                  // Acción que se ejecuta al tocar la opción para editar publicaciones desde el menú lateral.
+                  // Acción que se ejecuta al elegir la opción para editar publicaciones desde el menú lateral.
+                  onEditarPublicaciones: () async {
+                    // Cierra el menú lateral (Drawer) si está abierto antes de navegar a la otra pantalla.
+                    _panelKey.currentState?.closeDrawer();
+
+                    // Abre la pantalla 'MisPublicacionesPage' y espera hasta que el usuario termine de usarla y regrese.
+                    await Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => MisPublicacionesPage(
+                          tokenSesion: widget.tokenSesion,
+                          registrarActividad: registrarActividad,
+                          volverAlLogin: volverAlLogin,
+                        ),
+                      ),
+                    );
+
+                    // Verifica que la pantalla principal siga activa en memoria antes de intentar actualizarla.
+                    if (!context.mounted) return;
+
+                    // Actualizamos Inicio al regresar de Tus publicaciones.
+                    final publicacionesActualizadas = cargarPublicaciones();
+                    setState(() {
+                      _publicaciones = publicacionesActualizadas;
+                    });
+                  },
+
                   onCerrarSesion: () {
                     _panelKey.currentState?.closeDrawer();
                     cerrarSesion(context);
