@@ -25,6 +25,10 @@ from secrets import token_urlsafe
 from re import fullmatch
 # Importa 'monotonic', un reloj interno que solo avanza hacia adelante y sirve para medir cuánto tiempo lleva activa una sesión sin verse afectado por cambios de hora del sistema.
 from time import monotonic
+# Importa 'getenv' para leer variables de entorno del sistema (como contraseñas, usuarios o URLs configuradas fuera del código).
+from os import getenv
+# Importa 'quote' para codificar caracteres especiales en texto (por ejemplo, símbolos en una contraseña) para que no rompan una dirección URL.
+from urllib.parse import quote
 
 
 app = FastAPI(title="API Thank U Music")
@@ -314,4 +318,17 @@ def listar_publicaciones():
             """)
         ).mappings().all()
 
-    return [dict(fila) for fila in filas]
+    url_base = getenv("PORTADAS_BASE_URL", "").rstrip("/")
+    publicaciones = []
+
+    for fila in filas:
+        publicacion = dict(fila)
+        imagen = publicacion["imagen"]
+
+        publicacion["imagen_url"] = (
+            f"{url_base}/{quote(imagen, safe='')}" if url_base and imagen else None
+        )
+
+        publicaciones.append(publicacion)
+
+    return publicaciones

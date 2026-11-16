@@ -224,11 +224,28 @@ class _InicioPantallaState extends State<InicioPantalla> {
                         itemBuilder: (context, indice) {
                           // Obtiene el mapa de datos correspondiente a la publicación en la posición actual.
                           final publicacion = publicaciones[indice];
+                          final imagenUrl = publicacion['imagen_url']
+                              ?.toString();
 
                           // Crea una tarjeta 'PostCard' pasando el título y el contenido, usando texto vacío ('') como respaldo si algún campo viene nulo.
                           return PostCard(
                             titulo: publicacion['titulo']?.toString() ?? '',
                             resumen: publicacion['contenido']?.toString() ?? '',
+                            // Si la URL de la imagen es nula o está vacía, envía 'null' para que 'PostCard' muestre el icono por defecto; de lo contrario, descarga la imagen desde internet.
+                            portada: imagenUrl == null || imagenUrl.isEmpty
+                                ? null
+                                : Image.network(
+                                    imagenUrl,
+                                    // Ajusta la imagen para cubrir todo el espacio disponible recortando los bordes sobrantes sin deformarla.
+                                    fit: BoxFit.cover,
+                                    // En Flutter Web, prefiere usar una etiqueta HTML nativo (<img>) para evitar bloqueos de seguridad (CORS) al cargar imágenes externas.
+                                    webHtmlElementStrategy:
+                                        WebHtmlElementStrategy.prefer,
+                                    // Si la imagen no existe o falla al descargarse, muestra un icono de imagen rota centrado en lugar de arrojar un error en pantalla.
+                                    errorBuilder: (_, __, ___) => const Center(
+                                      child: Icon(Icons.broken_image_outlined),
+                                    ),
+                                  ),
                           );
                         },
                       );
