@@ -84,5 +84,35 @@ class ComentarioService {
     // Si el servidor no envió un mensaje específico, lanza un aviso general de error.
     throw StateError('No se pudo publicar el comentario.');
   }
+// Envía una petición al servidor para borrar un comentario específico dentro de una publicación.
+  Future<void> eliminarComentario({
+    required int idPublicacion,
+    required int idComentario,
+    required String tokenSesion,
+  }) async {
+    // Realiza la solicitud DELETE indicando el ID de la publicación y del comentario, enviando el token de sesión en la cabecera y cortando si tarda más de 10 segundos.
+    final respuesta = await http.delete(
+      Uri.parse(
+        'http://127.0.0.1:8000/publicaciones/$idPublicacion/comentarios/$idComentario',
+      ),
+      headers: {'Authorization': 'Bearer $tokenSesion'},
+    ).timeout(const Duration(seconds: 10));
 
+    // Si el servidor indica que la sesión ya caducó (código 401), lanza la excepción para volver al inicio de sesión.
+    if (respuesta.statusCode == 401) {
+      throw SesionInvalida();
+    }
+
+    // Si el servidor confirma el borrado con éxito (código 200), termina la función sin hacer nada más.
+    if (respuesta.statusCode == 200) return;
+
+    // Si hubo otro error, lee la respuesta del servidor y extrae el mensaje exacto que envió FastAPI en 'detail'.
+    final datos = jsonDecode(utf8.decode(respuesta.bodyBytes));
+    if (datos is Map<String, dynamic> && datos['detail'] is String) {
+      throw StateError(datos['detail'] as String);
+    }
+
+    // Si el servidor falló sin enviar un mensaje específico, lanza un error general.
+    throw StateError('No se pudo eliminar el comentario.');
+  }
 }

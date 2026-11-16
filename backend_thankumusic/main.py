@@ -468,6 +468,42 @@ def crear_comentario(
     # Confirma a la aplicación móvil que el comentario se guardó correctamente.
     return {"mensaje": "Comentario publicado."}
 
+# Ruta DELETE para borrar un comentario específico dentro de una publicación concreta.
+@app.delete("/publicaciones/{id_publicacion}/comentarios/{id_comentario}")
+def eliminar_comentario(
+    id_publicacion: int,
+    id_comentario: int,
+    sesion: dict = Depends(consultar_sesion),
+):
+    # Verifica que el usuario conectado tenga rol de administrador; si no, bloquea la acción (error 403).
+    if sesion["rol"] != "administrador":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo un administrador puede eliminar comentarios.",
+        )
+
+    # Abre una transacción segura en la base de datos que confirma el borrado al terminar o lo revierte si hay error.
+    with engine.begin() as conexion:
+        # Usamos ambos ID para borrar solo el comentario de esta publicación.
+        resultado = conexion.execute(
+            text("""
+                DELETE FROM comentarios
+                WHERE id_comentario = :id_comentario
+                  AND id_publicacion = :id_publicacion
+            """),
+            {
+                "id_comentario": id_comentario,
+                "id_publicacion": id_publicacion,
+            },
+        )
+
+        # Si no se borró ninguna fila porque el comentario no existe o pertenece a otra publicación, devuelve error 404.
+        if resultado.rowcount == 0:
+            raise HTTPException(status_code=404, detail="No se encontró el comentario.")
+
+    # Devuelve confirmación en formato JSON indicando que el comentario fue eliminado.
+    return {"mensaje": "Comentario eliminado."}
+
 # Revisa que el título, el contenido y la etiqueta cumplan con las reglas antes de guardar o actualizar una publicación.
 def validar_datos_publicacion(titulo: str, contenido: str, tags: str):
     # Quita los espacios en blanco sobrantes al inicio y al final del título y de la etiqueta.
