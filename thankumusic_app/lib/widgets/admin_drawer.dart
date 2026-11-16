@@ -9,6 +9,7 @@ class AdminDrawer extends StatelessWidget {
     required this.onAgregarPublicacion,
     required this.onCerrarSesion,
     required this.onEditarPublicaciones,
+    required this.onMiPerfil,
   });
 
   // Guarda el correo electrónico que se mostrará en la cabecera del menú.
@@ -17,7 +18,7 @@ class AdminDrawer extends StatelessWidget {
   // Función sin retorno que dispara el proceso de cierre de sesión al tocar la última opción.
   final VoidCallback onCerrarSesion;
   final VoidCallback onEditarPublicaciones;
-
+  final VoidCallback onMiPerfil;
 
   // Define el color rojo institucional reutilizable para iconos, bordes y textos destacados dentro de este menú.
   static const rojo = Color(0xFFB50020);
@@ -64,7 +65,7 @@ class AdminDrawer extends StatelessWidget {
             onTap: () => Navigator.of(context).pop(),
           ),
           // Lista de opciones del menú generadas con el método auxiliar 'opcion' (aún sin acción asignada excepto la última).
-          opcion(Icons.person_outline, 'Mi perfil'),
+          opcion(Icons.person_outline, 'Mi perfil', onTap: onMiPerfil),
           opcion(Icons.person_add_alt_1, 'Registrar usuario'),
           opcion(Icons.groups_outlined, 'Gestionar usuarios'),
           opcion(
@@ -72,7 +73,11 @@ class AdminDrawer extends StatelessWidget {
             'Agregar publicación',
             onTap: onAgregarPublicacion,
           ),
-          opcion(Icons.edit_outlined, 'Editar publicaciones',onTap: onEditarPublicaciones),
+          opcion(
+            Icons.edit_outlined,
+            'Editar publicaciones',
+            onTap: onEditarPublicaciones,
+          ),
           // Última opción que ejecuta la función 'onCerrarSesion' al ser presionada.
           opcion(Icons.logout, 'Cerrar sesión', onTap: onCerrarSesion),
         ],

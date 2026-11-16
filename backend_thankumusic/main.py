@@ -226,6 +226,142 @@ def consultar_sesion(
 
     return {"id_usuario": id_usuario, "rol": cuenta["rol"]}
 
+@app.get("/perfil")
+def consultar_perfil(sesion: dict = Depends(consultar_sesion)):
+    # Buscamos el perfil usando el ID de la cuenta que inició sesión.
+    with engine.connect() as conexion:
+        perfil = conexion.execute(
+            text("""
+                SELECT nombre, correo, direccion, foto
+                FROM usuarios
+                WHERE id_usuario = :id_usuario
+            """),
+            {"id_usuario": sesion["id_usuario"]},
+        ).mappings().first()
+
+    if perfil is None:
+        raise HTTPException(status_code=404, detail="No se encontró el perfil.")
+
+# Convierte el registro obtenido de la base de datos en un diccionario modificable de Python.
+    datos = dict(perfil)
+    # Extrae el nombre o ruta del archivo de la foto guardado en el registro.
+    foto = datos["foto"]
+    # Lee la dirección web base desde las variables de entorno y le quita la barra diagonal final si existe.
+    url_base = getenv("PORTADAS_BASE_URL", "").rstrip("/")
+
+    # Si existen tanto la dirección base como una foto asignada, arma la URL completa codificando caracteres especiales del nombre del archivo; si no, deja el campo vacío (None).
+    datos["foto_url"] = (
+        f"{url_base}/{quote(Path(foto).name, safe='')}"
+        if url_base and foto
+        else None
+    )
+
+    # Devuelve el diccionario del perfil con la dirección web de la foto ya incluida.
+    return datos
+
+class PerfilRequest(BaseModel):
+    nombre: str
+    correo: str
+    direccion: str
+
+
+@app.patch("/perfil")
+def actualizar_perfil(
+    datos: PerfilRequest,
+    sesion: dict = Depends(consultar_sesion),
+):
+    nombre = datos.nombre.strip()
+    correo = datos.correo.strip().lower()
+    direccion = datos.direccion.strip()
+
+    if not nombre or not correo or not direccion:
+        raise HTTPException(status_code=422, detail="Completa todos los campos.")
+
+    if len(nombre) > 100 or not all(
+        letra.isalpha() or letra == " " for letra in nombre
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="El nombre debe tener hasta 100 caracteres y solo letras y espacios.",
+        )
+
+    if len(correo) > 150 or not fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", correo):
+        raise HTTPException(status_code=422, detail="Escribe un correo electrónico válido.")
+
+    if len(direccion) > 255:
+        raise HTTPException(
+            status_code=422,
+            detail="La dirección no puede superar los 255 caracteres.",
+        )
+
+    try:
+        with engine.begin() as conexion:
+            # El ID sale de la sesión, igual que al consultar el perfil.
+            conexion.execute(
+                text("""
+                    UPDATE usuarios
+                    SET nombre = :nombre, correo = :correo, direccion = :direccion
+                    WHERE id_usuario = :id_usuario
+                """),
+                {
+                    "nombre": nombre,
+                    "correo": correo,
+                    "direccion": direccion,
+                    "id_usuario": sesion["id_usuario"],
+                },
+            )
+    except IntegrityError as error:
+        if error.orig.args[0] == 1062:
+            raise HTTPException(
+                status_code=409,
+                detail="Ese correo ya está en uso.",
+            ) from error
+        raise
+
+    return {"nombre": nombre, "correo": correo, "direccion": direccion}
+
+# Ruta POST para subir una nueva imagen y guardarla como foto de perfil del usuario conectado.
+@app.post("/perfil/foto")
+def actualizar_foto_perfil(
+    foto: UploadFile = File(...),
+    sesion: dict = Depends(consultar_sesion),
+):
+    # Guarda el archivo recibido en el disco del servidor con el prefijo 'perfil_' y devuelve su ruta.
+    ruta = guardar_portada_publicacion(foto, prefijo="perfil_")
+
+    try:
+        # Inicia una transacción segura en la base de datos para actualizar el nombre del archivo de la foto.
+        with engine.begin() as conexion:
+            resultado = conexion.execute(
+                text("""
+                    UPDATE usuarios
+                    SET foto = :foto
+                    WHERE id_usuario = :id_usuario
+                """),
+                {
+                    "foto": ruta.name,
+                    "id_usuario": sesion["id_usuario"],
+                },
+            )
+
+            # Si no se actualizó ningún registro porque el usuario no existe, borra la imagen recién subida y lanza error 404.
+            if resultado.rowcount == 0:
+                ruta.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=404,
+                    detail="No se encontró el perfil.",
+                )
+    except SQLAlchemyError as error:
+        # Si ocurre algún fallo con la base de datos, elimina el archivo guardado para no dejar basura y devuelve error 500.
+        ruta.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo guardar la foto de perfil.",
+        ) from error
+
+    # Devuelve los datos completos y actualizados del perfil (incluyendo la nueva URL de la foto).
+    return consultar_perfil(sesion)
+
 # Crea la ruta POST '/logout' en la API para invalidar y cerrar la sesión activa del usuario.
 @app.post("/logout")
 def cerrar_sesion(
@@ -527,7 +663,7 @@ def validar_datos_publicacion(titulo: str, contenido: str, tags: str):
     return titulo, tags
 
 
-def guardar_portada_publicacion(imagen: UploadFile) -> Path:
+def guardar_portada_publicacion(imagen: UploadFile, *, prefijo: str = "") -> Path:
     directorio = getenv("PORTADAS_DIRECTORIO", "")
     if not directorio or not Path(directorio).is_dir():
         raise HTTPException(
@@ -548,7 +684,8 @@ def guardar_portada_publicacion(imagen: UploadFile) -> Path:
             detail="Selecciona una imagen JPG, PNG o WebP válida.",
         ) from error
 
-    ruta = Path(directorio) / (uuid4().hex + extensiones[formato])
+    nombre = f"{prefijo}{uuid4().hex}{extensiones[formato]}"
+    ruta = Path(directorio) / nombre
 
     try:
         with portada_lista:

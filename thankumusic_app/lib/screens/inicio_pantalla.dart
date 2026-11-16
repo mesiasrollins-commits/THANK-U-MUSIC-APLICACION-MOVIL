@@ -8,6 +8,7 @@ import '../widgets/post_card.dart';
 
 import 'add_blog_page.dart';
 import 'mis_publicaciones.dart';
+import 'perfil_page.dart';
 import 'login_user_page.dart';
 import 'post_detail_page.dart';
 
@@ -38,6 +39,22 @@ class _InicioPantallaState extends State<InicioPantalla> {
   // Guarda la promesa (Future) con la lista de publicaciones para evitar que se vuelvan a descargar cada vez que se redibuja la pantalla.
   // Se marca como 'late final' porque se inicializará una única vez dentro de 'initState'.
   late Future<List<Map<String, dynamic>>> _publicaciones;
+  // Cierra el menú lateral y abre la pantalla con los datos del perfil del usuario conectado.
+  void abrirPerfil() {
+    // Cierra el menú lateral (Drawer) si está abierto antes de cambiar de vista.
+    _panelKey.currentState?.closeDrawer();
+
+    // Navega a la pantalla 'PerfilPage' enviándole el token de sesión y las funciones para renovar actividad o regresar al login.
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PerfilPage(
+          tokenSesion: widget.tokenSesion,
+          registrarActividad: registrarActividad,
+          volverAlLogin: volverAlLogin,
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -225,6 +242,8 @@ class _InicioPantallaState extends State<InicioPantalla> {
                       _publicaciones = publicacionesActualizadas;
                     });
                   },
+
+                  onMiPerfil: abrirPerfil,
 
                   onCerrarSesion: () {
                     _panelKey.currentState?.closeDrawer();
