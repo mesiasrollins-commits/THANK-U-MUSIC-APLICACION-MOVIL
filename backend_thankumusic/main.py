@@ -301,3 +301,17 @@ def registrar_usuario(datos: RegistroRequest):
         raise
 
     return {"mensaje": "Cuenta creada correctamente."}
+
+@app.get("/publicaciones", dependencies=[Depends(consultar_sesion)])
+def listar_publicaciones():
+    with engine.connect() as conexion:
+        filas = conexion.execute(
+            text("""
+                SELECT id_publicacion, titulo, contenido, imagen
+                FROM publicaciones
+                WHERE estado = 'publicada'
+                ORDER BY fecha_publicacion DESC, id_publicacion DESC
+            """)
+        ).mappings().all()
+
+    return [dict(fila) for fila in filas]

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../services/post_service.dart';
 import '../widgets/actividad_sesion.dart';
 import '../widgets/admin_drawer.dart';
+import '../widgets/post_card.dart';
 import 'login_user_page.dart';
 
 class InicioPantalla extends StatefulWidget {
@@ -28,6 +30,35 @@ class InicioPantalla extends StatefulWidget {
 class _InicioPantallaState extends State<InicioPantalla> {
   // Permite abrir y cerrar el menú del Scaffold que está debajo de la barra roja.
   final _panelKey = GlobalKey<ScaffoldState>();
+
+  // Guarda la promesa (Future) con la lista de publicaciones para evitar que se vuelvan a descargar cada vez que se redibuja la pantalla.
+  // Se marca como 'late final' porque se inicializará una única vez dentro de 'initState'.
+  late final Future<List<Map<String, dynamic>>> _publicaciones;
+
+  @override
+  void initState() {
+    super.initState();
+    // Inicia la descarga de las publicaciones una sola vez en el momento en que se crea esta pantalla.
+    _publicaciones = cargarPublicaciones();
+  }
+
+  // Solicita las publicaciones al servicio y redirige al login si el servidor indica que el token ya venció.
+  Future<List<Map<String, dynamic>>> cargarPublicaciones() async {
+    try {
+      // Llama al servicio enviando el token actual de la sesión para traer los datos desde FastAPI.
+      return await PostService().obtenerPublicaciones(widget.tokenSesion);
+    } on SesionInvalida {
+      // Verifica que la pantalla siga montada en pantalla antes de ejecutar la navegación.
+      if (mounted) {
+        volverAlLogin(
+          context,
+          aviso: 'La sesión terminó. Inicia sesión de nuevo.',
+        );
+      }
+      // Vuelve a lanzar el error ('rethrow') para que un posible FutureBuilder sepa que la petición falló y no quede esperando indefinidamente.
+      rethrow;
+    }
+  }
 
   // Conecta la detección de actividad de la pantalla con el servicio de autenticación y maneja el cierre automático si la sesión ya venció.
   Future<void> registrarActividad(BuildContext context) async {
@@ -156,6 +187,55 @@ class _InicioPantallaState extends State<InicioPantalla> {
                 ),
                 // Inserta una separación vertical vacía entre el saludo y el botón.
                 const SizedBox(height: 16),
+
+                // Hace que el bloque ocupe todo el espacio vertical restante dentro de la columna para que la lista pueda desplazarse sin desbordarse.
+                Expanded(
+                  // Escucha el estado de '_publicaciones' y reconstruye la interfaz automáticamente según vaya cambiando (cargando, error o listo).
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _publicaciones,
+                    builder: (context, snapshot) {
+                      // Mientras la petición HTTP sigue en curso, muestra una rueda giratoria centrada en la pantalla.
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      // Si ocurrió algún fallo al pedir o procesar los datos, muestra un mensaje de error centrado.
+                      if (snapshot.hasError) {
+                        return const Center(
+                          child: Text(
+                            'No se pudieron cargar las publicaciones.',
+                          ),
+                        );
+                      }
+
+                      // Extrae la lista de publicaciones recibida desde el servidor.
+                      final publicaciones = snapshot.data;
+
+                      // Si la lista llegó nula o vacía, informa al usuario que aún no hay contenido registrado.
+                      if (publicaciones == null || publicaciones.isEmpty) {
+                        return const Center(
+                          child: Text('Todavía no hay publicaciones.'),
+                        );
+                      }
+
+                      // Construye una lista desplazable que dibuja las tarjetas bajo demanda conforme el usuario baja por la pantalla.
+                      return ListView.builder(
+                        itemCount: publicaciones.length,
+                        itemBuilder: (context, indice) {
+                          // Obtiene el mapa de datos correspondiente a la publicación en la posición actual.
+                          final publicacion = publicaciones[indice];
+
+                          // Crea una tarjeta 'PostCard' pasando el título y el contenido, usando texto vacío ('') como respaldo si algún campo viene nulo.
+                          return PostCard(
+                            titulo: publicacion['titulo']?.toString() ?? '',
+                            resumen: publicacion['contenido']?.toString() ?? '',
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+
                 // Centra horizontalmente el botón dentro del ancho disponible de la pantalla.
                 Center(
                   child: ElevatedButton(
