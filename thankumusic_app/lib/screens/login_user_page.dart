@@ -93,6 +93,8 @@ class _LoginPageState extends State<LoginPage> {
         MaterialPageRoute(
           builder: (_) => InicioPantalla(
             nombre: usuario['nombre'] as String,
+            rol: usuario['rol'] as String,
+            correo: usuario['correo'] as String,
             tokenSesion: tokenSesion,
             authService: authService,
           ),
