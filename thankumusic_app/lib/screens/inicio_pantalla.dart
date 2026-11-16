@@ -5,6 +5,8 @@ import '../services/post_service.dart';
 import '../widgets/actividad_sesion.dart';
 import '../widgets/admin_drawer.dart';
 import '../widgets/post_card.dart';
+
+import 'add_blog_page.dart';
 import 'login_user_page.dart';
 import 'post_detail_page.dart';
 
@@ -34,7 +36,7 @@ class _InicioPantallaState extends State<InicioPantalla> {
 
   // Guarda la promesa (Future) con la lista de publicaciones para evitar que se vuelvan a descargar cada vez que se redibuja la pantalla.
   // Se marca como 'late final' porque se inicializará una única vez dentro de 'initState'.
-  late final Future<List<Map<String, dynamic>>> _publicaciones;
+  late Future<List<Map<String, dynamic>>> _publicaciones;
 
   @override
   void initState() {
@@ -161,6 +163,37 @@ class _InicioPantallaState extends State<InicioPantalla> {
           drawer: esAdmin
               ? AdminDrawer(
                   correo: widget.correo,
+                  // Acción que se ejecuta al tocar la opción para agregar una nueva publicación desde el menú lateral.
+                  onAgregarPublicacion: () async {
+                    // Cierra el menú lateral (Drawer) si está abierto antes de cambiar de pantalla.
+                    _panelKey.currentState?.closeDrawer();
+
+                    // Abre la pantalla 'AddBlogPage' y espera hasta que el usuario regrese de ella; recibe 'true' si sí se creó la publicación.
+                    final publicada = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) => AddBlogPage(
+                          registrarActividad: registrarActividad,
+                          tokenSesion: widget.tokenSesion,
+                          volverAlLogin: volverAlLogin,
+                        ),
+                      ),
+                    );
+
+                    // Si la pantalla anterior ya no existe o el usuario regresó sin guardar ('publicada' no es true), no hace nada más.
+                    if (!context.mounted || publicada != true) return;
+
+                    // Vuelve a pedir la lista de publicaciones al servidor y redibuja la pantalla para mostrar la nueva entrada.
+                    final publicacionesActualizadas = cargarPublicaciones();
+                    setState(() {
+                      _publicaciones = publicacionesActualizadas;
+                    });
+
+                    // Muestra un mensaje corto en la parte inferior confirmando que la publicación se creó con éxito.
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Publicación creada.')),
+                    );
+                  },
+                  
                   onCerrarSesion: () {
                     _panelKey.currentState?.closeDrawer();
                     cerrarSesion(context);

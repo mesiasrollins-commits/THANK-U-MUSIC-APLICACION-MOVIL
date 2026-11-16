@@ -1,5 +1,7 @@
 # Importa las herramientas principales de FastAPI: inyección de dependencias (Depends), la aplicación (FastAPI) y el manejo de errores HTTP (HTTPException).
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, File, Form, UploadFile
+# Importa 'ImageOps' para aplicar ajustes automáticos sencillos a las imágenes (como corregir su orientación según los datos de la cámara o recortarlas).
+from PIL import Image, ImageOps
 # Importa las clases para leer y validar el token de sesión tipo Bearer que envía Flutter en los encabezados HTTP.
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 # Importa BaseModel para definir la estructura de datos, Field para reglas de longitud, ConfigDict para configuración global y EmailStr para validar correos.
@@ -13,7 +15,7 @@ from pwdlib.hashers.bcrypt import BcryptHasher
 # Importa la función 'text' de SQLAlchemy para escribir consultas SQL puras de forma segura evitando inyecciones SQL.
 from sqlalchemy import text
 # Importa el error 'IntegrityError' para detectar cuando la base de datos rechaza un registro duplicado (como un correo ya existente).
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 # Importa la conexión configurada a la base de datos desde tu archivo local 'database.py'.
 from database import engine
@@ -29,6 +31,10 @@ from time import monotonic
 from os import getenv
 # Importa 'quote' para codificar caracteres especiales en texto (por ejemplo, símbolos en una contraseña) para que no rompan una dirección URL.
 from urllib.parse import quote
+# Importa 'Path' para manejar rutas de carpetas y archivos de forma limpia y compatible con cualquier sistema operativo.
+from pathlib import Path
+# Importa 'uuid4' para generar identificadores únicos aleatorios (útil para nombrar archivos subidos sin que se sobrescriban).
+from uuid import uuid4
 
 
 app = FastAPI(title="API Thank U Music")
@@ -419,3 +425,88 @@ def crear_comentario(
 
     # Confirma a la aplicación móvil que el comentario se guardó correctamente.
     return {"mensaje": "Comentario publicado."}
+
+# Ruta POST para crear una publicación nueva recibiendo campos de formulario y un archivo de imagen; devuelve código 201 al completarse.
+@app.post("/publicaciones", status_code=201)
+def crear_publicacion(
+    titulo: str = Form(...),
+    contenido: str = Form(...),
+    tags: str = Form(...),
+    imagen: UploadFile = File(...),
+    sesion: dict = Depends(consultar_sesion),
+):
+    # Verifica que el usuario conectado tenga permiso de administrador; si no, bloquea la acción (error 403).
+    if sesion["rol"] != "administrador":
+        raise HTTPException(status_code=403, detail="Solo un administrador puede publicar.")
+
+    # Quita los espacios en blanco sobrantes al inicio y al final del título y de la etiqueta.
+    titulo = titulo.strip()
+    tags = tags.strip()
+
+    # Revisa que el título no quede vacío y que no pase de 200 letras.
+    if not titulo or len(titulo) > 200:
+        raise HTTPException(status_code=422, detail="Escribe un título de hasta 200 caracteres.")
+
+    # Revisa que el contenido tenga texto y no rebase el límite de 15,000 caracteres.
+    if not contenido.strip() or len(contenido) > 15000:
+        raise HTTPException(status_code=422, detail="Escribe un contenido de hasta 15 000 caracteres.")
+
+    # Lista cerrada de categorías permitidas; si envían otra distinta, detiene el proceso (error 422).
+    etiquetas = ("analisis", "resena", "recomendacion", "Aviso", "Conciertos")
+    if tags not in etiquetas:
+        raise HTTPException(status_code=422, detail="Selecciona una etiqueta válida.")
+
+    # Obtiene desde la configuración del sistema la carpeta donde se guardarán las portadas y comprueba que realmente exista.
+    directorio = getenv("PORTADAS_DIRECTORIO", "")
+    if not directorio or not Path(directorio).is_dir():
+        raise HTTPException(status_code=500, detail="Revisa la carpeta compartida de portadas.")
+
+    # Intenta abrir el archivo subido aceptando únicamente JPG, PNG o WebP y endereza la foto si viene girada desde el celular.
+    extensiones = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
+    try:
+        with Image.open(imagen.file, formats=list(extensiones)) as portada:
+            formato = portada.format
+            portada_lista = ImageOps.exif_transpose(portada)
+    except (OSError, ValueError, Image.DecompressionBombError) as error:
+        # Si el archivo está dañado, es demasiado pesado o no es una imagen permitida, devuelve un error de validación (422).
+        raise HTTPException(
+            status_code=422,
+            detail="Selecciona una imagen JPG, PNG o WebP válida.",
+        ) from error
+
+    # Genera un nombre aleatorio único (para no sobrescribir fotos anteriores) con su extensión correcta y arma la ruta final.
+    nombre_imagen = uuid4().hex + extensiones[formato]
+    ruta_imagen = Path(directorio) / nombre_imagen
+
+    try:
+        # Guarda la imagen ya procesada dentro de la carpeta compartida del servidor.
+        with portada_lista:
+            portada_lista.save(ruta_imagen, format=formato)
+
+        # Abre una conexión segura a la base de datos y registra los datos de la publicación junto con el nombre de su imagen.
+        with engine.begin() as conexion:
+            resultado = conexion.execute(
+                text("""
+                    INSERT INTO publicaciones
+                        (titulo, contenido, imagen, tags, id_autor)
+                    VALUES
+                        (:titulo, :contenido, :imagen, :tags, :id_autor)
+                """),
+                {
+                    "titulo": titulo,
+                    "contenido": contenido,
+                    "imagen": nombre_imagen,
+                    "tags": tags,
+                    "id_autor": sesion["id_usuario"],
+                },
+            )
+            # Recupera el número de identificación (ID) que la base de datos le asignó a esta nueva publicación.
+            id_publicacion = resultado.lastrowid
+
+    except (OSError, SQLAlchemyError) as error:
+        # Si algo falla al guardar el archivo o al insertar en la base de datos, borra la imagen que se alcanzó a crear para no dejar basura.
+        ruta_imagen.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail="No se pudo guardar la publicación.") from error
+
+    # Devuelve el ID recién creado y un mensaje de confirmación a la aplicación.
+    return {"id_publicacion": id_publicacion, "mensaje": "Publicación creada."}

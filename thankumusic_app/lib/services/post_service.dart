@@ -42,4 +42,57 @@ class PostService {
     // Devuelve los datos asegurándose de que cada elemento sea un mapa
     return List<Map<String, dynamic>>.from(datos);
   }
+
+  // Envía todos los datos de la nueva publicación (textos y archivo de imagen) al servidor FastAPI para guardarla.
+  Future<void> crearPublicacion({
+    required String tokenSesion,
+    required String titulo,
+    required String contenido,
+    required String etiqueta,
+    required List<int> portada,
+  }) async {
+    // Crea una petición especial de tipo 'MultipartRequest', necesaria cuando se envían textos y archivos juntos en un mismo formulario.
+    final solicitud = http.MultipartRequest(
+      'POST',
+      Uri.parse('http://127.0.0.1:8000/publicaciones'),
+    );
+
+    // Agrega el token de sesión en la cabecera para que el servidor compruebe que el usuario tiene permiso de administrador.
+    solicitud.headers['Authorization'] = 'Bearer $tokenSesion';
+
+    // Añade los campos de texto del formulario con los nombres exactos que espera recibir FastAPI.
+    solicitud.fields.addAll({
+      'titulo': titulo,
+      'contenido': contenido,
+      'tags': etiqueta,
+    });
+
+    // Adjunta los bytes de la imagen bajo el campo 'imagen'; FastAPI detectará el formato real y le pondrá un nombre único.
+    solicitud.files.add(
+      http.MultipartFile.fromBytes('imagen', portada, filename: 'portada'),
+    );
+
+    // Envía la petición, espera a que termine de subirse el archivo y convierte la respuesta en un formato legible, con un límite de espera de 30 segundos.
+    final respuesta = await solicitud
+        .send()
+        .then(http.Response.fromStream)
+        .timeout(const Duration(seconds: 30));
+
+    // Si el servidor responde con 401, avisa que la sesión caducó para regresar al usuario al inicio de sesión.
+    if (respuesta.statusCode == 401) {
+      throw SesionInvalida();
+    }
+
+    // Si el servidor responde con 201, la publicación se creó con éxito y termina la función.
+    if (respuesta.statusCode == 201) return;
+
+    // Si ocurrió otro error (por ejemplo, título muy largo o imagen inválida), extrae el mensaje de detalle que envió el servidor.
+    final datos = jsonDecode(utf8.decode(respuesta.bodyBytes));
+    if (datos is Map<String, dynamic> && datos['detail'] is String) {
+      throw StateError(datos['detail'] as String);
+    }
+
+    // Si no venía un mensaje específico del servidor, lanza un aviso general de fallo.
+    throw StateError('No se pudo crear la publicación.');
+  }
 }

@@ -6,11 +6,13 @@ class AdminDrawer extends StatelessWidget {
   const AdminDrawer({
     super.key,
     required this.correo,
+    required this.onAgregarPublicacion,
     required this.onCerrarSesion,
   });
 
   // Guarda el correo electrónico que se mostrará en la cabecera del menú.
   final String correo;
+  final VoidCallback onAgregarPublicacion;
   // Función sin retorno que dispara el proceso de cierre de sesión al tocar la última opción.
   final VoidCallback onCerrarSesion;
 
@@ -62,7 +64,11 @@ class AdminDrawer extends StatelessWidget {
           opcion(Icons.person_outline, 'Mi perfil'),
           opcion(Icons.person_add_alt_1, 'Registrar usuario'),
           opcion(Icons.groups_outlined, 'Gestionar usuarios'),
-          opcion(Icons.post_add, 'Agregar publicación'),
+          opcion(
+            Icons.post_add,
+            'Agregar publicación',
+            onTap: onAgregarPublicacion,
+          ),
           opcion(Icons.edit_outlined, 'Editar publicaciones'),
           // Última opción que ejecuta la función 'onCerrarSesion' al ser presionada.
           opcion(Icons.logout, 'Cerrar sesión', onTap: onCerrarSesion),
