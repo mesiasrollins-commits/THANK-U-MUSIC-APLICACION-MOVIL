@@ -162,6 +162,12 @@ def consultar_sesion(
     token_sesion = credenciales.credentials
     # Busca ese token dentro del diccionario de sesiones activas en la memoria del servidor.
     sesion = sesiones.get(token_sesion)
+    
+    if sesion is None:
+        print("Sesión no encontrada en memoria.")
+    else:
+        segundos_restantes = sesion["vence_en"] - monotonic()
+        print(f"Segundos restantes de la sesión: {segundos_restantes:.1f}")
 
     # Si la sesión existe pero el reloj actual del sistema ya alcanzó o superó la hora de vencimiento ('vence_en'):
     if sesion is not None and monotonic() >= sesion["vence_en"]:
@@ -177,8 +183,26 @@ def consultar_sesion(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Si el token es válido y sigue vigente, devuelve el identificador del usuario dueño de la sesión.
-    return {"id_usuario": sesion["id_usuario"]}
+    id_usuario = sesion["id_usuario"]
+
+    # Consultamos el estado actual de la cuenta en MySQL.
+    with engine.connect() as conexion:
+        estado = conexion.execute(
+            text("SELECT estado FROM usuarios WHERE id_usuario = :id_usuario"),
+            {"id_usuario": id_usuario},
+        # Ejecuta la consulta SQL esperando un único valor (una sola columna de una sola fila, como el id o la contraseña encriptada).
+        # Si encuentra el registro, devuelve ese valor directo; si no existe ningún usuario que coincida, devuelve None sin lanzar error
+        ).scalar_one_or_none()
+
+    if estado != "activo":
+        sesiones.pop(token_sesion, None)
+        raise HTTPException(
+            status_code=401,
+            detail="La cuenta ya no está activa.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return {"id_usuario": id_usuario}
 
 # Crea la ruta POST '/logout' en la API para invalidar y cerrar la sesión activa del usuario.
 @app.post("/logout")

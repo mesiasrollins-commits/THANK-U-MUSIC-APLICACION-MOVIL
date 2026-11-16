@@ -198,10 +198,20 @@ class _RegisterPageState extends State<RegisterPage> {
                         final correo = correoController.text.trim();
                         final direccion = direccionController.text.trim();
                         final password = passwordController.text;
+                        final formatoCorreo = RegExp(
+                          r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                        );
 
                         String? error;
 
-                        if (RegExp(r'[0-9]').hasMatch(nombre)) {
+                        if (nombre.isEmpty ||
+                            correo.isEmpty ||
+                            direccion.isEmpty ||
+                            password.isEmpty) {
+                          error = 'Completa todos los campos.';
+                        } else if (!formatoCorreo.hasMatch(correo)) {
+                          error = 'Escribe un correo electrónico válido.';
+                        } else if (RegExp(r'[0-9]').hasMatch(nombre)) {
                           error = 'No se permiten números en el nombre.';
                         } else if (RegExp(
                           r'[^\p{L}\p{M} ]',
@@ -244,8 +254,8 @@ class _RegisterPageState extends State<RegisterPage> {
                           errorRegistro =
                               'No se pudo comunicar con el servidor.';
                         }
-                        // Verifica que el widget de esta pantalla siga activo en pantalla después de esperar 
-                        //la respuesta del servidor; si el usuario ya cerró o salió de la vista, 
+                        // Verifica que el widget de esta pantalla siga activo en pantalla después de esperar
+                        //la respuesta del servidor; si el usuario ya cerró o salió de la vista,
                         //detiene la función para evitar errores al intentar actualizar la interfaz o navegar.
                         if (!context.mounted) return;
 
