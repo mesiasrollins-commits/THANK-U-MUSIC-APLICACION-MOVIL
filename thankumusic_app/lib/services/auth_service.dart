@@ -2,8 +2,16 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+class SesionInvalida extends StateError {
+  SesionInvalida() : super('La sesión es inválida o venció.');
+}
+
 // Clase encargada de concentrar la lógica y validaciones de autenticación (separada de la interfaz gráfica).
 class AuthService {
+  // Crea un cronómetro interno para medir cuánto tiempo ha pasado desde la última vez que se le avisó al servidor que el usuario sigue activo.
+  // Sirve para no saturar FastAPI con peticiones cada milisegundo cuando el usuario hace una interaccion en la app sin parar.
+  final Stopwatch _tiempoDesdeUltimaConsulta = Stopwatch();
+
   // Método que revisa los datos del formulario de registro.
   // Devuelve un texto (String) con el mensaje de error si algo falla, o 'null' (vacío) si todo está correcto.
   String? validarRegistro({
@@ -98,13 +106,30 @@ class AuthService {
 
     // Si FastAPI responde con código 401 (No autorizado), significa que el token no existe o ya pasó su hora de vigencia; lanza un error específico para cerrar la sesión en la app.
     if (respuesta.statusCode == 401) {
-      throw StateError('La sesión es inválida o venció.');
+      throw SesionInvalida();
     }
 
     // Si el servidor responde con cualquier otro código distinto a 200 (éxito), lanza un error general de validación.
     if (respuesta.statusCode != 200) {
       throw StateError('No se pudo comprobar la sesión.');
     }
+  }
+
+  // Registra que el usuario sigue activo y renueva su sesión en el servidor, limitando los envíos a máximo una petición por minuto.
+  Future<void> registrarActividad(String tokenSesion) async {
+    // Si el cronómetro ya está corriendo y aún no pasa 1 minuto desde el último aviso al servidor, sale de la función sin hacer nada para evitar saturar la red.
+    if (_tiempoDesdeUltimaConsulta.isRunning &&
+        _tiempoDesdeUltimaConsulta.elapsed < const Duration(minutes: 1)) {
+      return;
+    }
+
+    // Reinicia el cronómetro a cero ('reset') y lo vuelve a arrancar ('start') usando el operador cascada ('..') para empezar a contar el nuevo minuto.
+    _tiempoDesdeUltimaConsulta
+      ..reset()
+      ..start();
+
+    // Envía la petición HTTP a FastAPI con el token actual para verificar que la sesión siga válida y extender su tiempo de expiración.
+    await comprobarSesion(tokenSesion);
   }
 
   // Método asíncrono que envía el token activo al servidor FastAPI para invalidarlo y cerrar la sesión.

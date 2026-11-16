@@ -94,6 +94,7 @@ class _LoginPageState extends State<LoginPage> {
           builder: (_) => InicioPantalla(
             nombre: usuario['nombre'] as String,
             tokenSesion: tokenSesion,
+            authService: authService,
           ),
         ),
       );

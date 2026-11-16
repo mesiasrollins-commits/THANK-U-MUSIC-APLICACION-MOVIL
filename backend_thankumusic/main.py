@@ -38,6 +38,11 @@ app.add_middleware(
 
 # Guardamos las sesiones mientras FastAPI esté ejecutándose.
 sesiones = {}
+
+# Define el tiempo máximo de inactividad permitido antes de cerrar la sesión automáticamente.
+# Se escribe como 10 * 60 para indicar claramente que son 10 minutos expresados en segundos (600 segundos en total).
+TIEMPO_INACTIVIDAD = 10 * 60  # Segundos.
+
 # Crea un lector para extraer el token de sesión que la app en Flutter envía dentro del encabezado HTTP "Authorization: Bearer <token>".
 # auto_error=False evita que FastAPI corte la petición con un error genérico automático si el encabezado falta; en su lugar devuelve None para que tú mismo puedas validar el token y responder con tu propio mensaje de error personalizado.
 leer_token = HTTPBearer(auto_error=False)
@@ -131,7 +136,7 @@ def iniciar_sesion(datos: LoginRequest):
         # Asocia este pase con el identificador único del usuario que inició sesión.
         "id_usuario": usuario["id_usuario"],
         # Calcula el momento exacto en que caducará la sesión sumando 3600 segundos (1 hora) al reloj interno del sistema (monotonic).
-        "vence_en": monotonic() + 3600,
+        "vence_en": monotonic() + TIEMPO_INACTIVIDAD,
     }
 
     # Devuelve en formato JSON los datos del usuario junto con el nuevo token para que Flutter lo guarde y lo envíe en futuras peticiones.
@@ -201,7 +206,10 @@ def consultar_sesion(
             detail="La cuenta ya no está activa.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
+    # Calcula y guarda el momento exacto en el que caducará la sesión sumando los segundos de tolerancia al reloj interno actual ('monotonic()').
+    # Usar 'monotonic()' evita fallos de seguridad si alguien cambia la hora del reloj de la computadora o servidor mientras la sesión está abierta.
+    sesion["vence_en"] = monotonic() + TIEMPO_INACTIVIDAD
+    
     return {"id_usuario": id_usuario}
 
 # Crea la ruta POST '/logout' en la API para invalidar y cerrar la sesión activa del usuario.
