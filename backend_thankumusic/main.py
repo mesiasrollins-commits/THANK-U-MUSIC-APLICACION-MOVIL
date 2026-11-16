@@ -194,27 +194,31 @@ def consultar_sesion(
 
     id_usuario = sesion["id_usuario"]
 
-    # Consultamos el estado actual de la cuenta en MySQL.
+        # Consultamos el estado y el rol actuales de la cuenta en MySQL.
     with engine.connect() as conexion:
-        estado = conexion.execute(
-            text("SELECT estado FROM usuarios WHERE id_usuario = :id_usuario"),
+        cuenta = conexion.execute(
+            text("""
+                SELECT estado, rol
+                FROM usuarios
+                WHERE id_usuario = :id_usuario
+            """),
             {"id_usuario": id_usuario},
-        # Ejecuta la consulta SQL esperando un único valor (una sola columna de una sola fila, como el id o la contraseña encriptada).
-        # Si encuentra el registro, devuelve ese valor directo; si no existe ningún usuario que coincida, devuelve None sin lanzar error
-        ).scalar_one_or_none()
+        ).mappings().first()
+        # Podemos leer las dos columnas por nombre. Si no hay usuario, cuenta vale None.
 
-    if estado != "activo":
+    if cuenta is None or cuenta["estado"] != "activo":
         sesiones.pop(token_sesion, None)
         raise HTTPException(
             status_code=401,
             detail="La cuenta ya no está activa.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    # Calcula y guarda el momento exacto en el que caducará la sesión sumando los segundos de tolerancia al reloj interno actual ('monotonic()').
-    # Usar 'monotonic()' evita fallos de seguridad si alguien cambia la hora del reloj de la computadora o servidor mientras la sesión está abierta.
+
+    # Calcula y guarda el momento en el que caducará la sesión.
+    # Usamos monotonic() para que los cambios en la hora del servidor no alteren el plazo.
     sesion["vence_en"] = monotonic() + TIEMPO_INACTIVIDAD
-    
-    return {"id_usuario": id_usuario}
+
+    return {"id_usuario": id_usuario, "rol": cuenta["rol"]}
 
 # Crea la ruta POST '/logout' en la API para invalidar y cerrar la sesión activa del usuario.
 @app.post("/logout")
@@ -311,10 +315,12 @@ def listar_publicaciones():
     with engine.connect() as conexion:
         filas = conexion.execute(
             text("""
-                SELECT id_publicacion, titulo, contenido, imagen
-                FROM publicaciones
-                WHERE estado = 'publicada'
-                ORDER BY fecha_publicacion DESC, id_publicacion DESC
+               SELECT p.id_publicacion, p.titulo, p.contenido, p.imagen,
+                u.nombre AS autor, p.fecha_publicacion
+                FROM publicaciones AS p
+                LEFT JOIN usuarios AS u ON u.id_usuario = p.id_autor
+                WHERE p.estado = 'publicada'
+                ORDER BY p.fecha_publicacion DESC, p.id_publicacion DESC
             """)
         ).mappings().all()
 
@@ -332,3 +338,34 @@ def listar_publicaciones():
         publicaciones.append(publicacion)
 
     return publicaciones
+
+# Define un endpoint GET en FastAPI que recibe el ID de una publicación en la ruta y exige que la sesión sea válida ('consultar_sesion') antes de ejecutar la función.
+@app.get(
+    "/publicaciones/{id_publicacion}/comentarios",
+    dependencies=[Depends(consultar_sesion)],
+)
+def listar_comentarios(id_publicacion: int):
+    # Abre una conexión temporal a la base de datos 
+    with engine.connect() as conexion:
+        # Ejecuta una consulta SQL  y obtiene todas las filas como diccionarios ('mappings().all()').
+        filas = conexion.execute(
+            text("""
+                -- Selecciona el identificador, texto y fecha del comentario, junto con el nombre del usuario que lo escribió.
+                SELECT c.id_comentario, c.comentario, c.fecha_comentario,
+                       u.nombre AS autor
+                FROM comentarios AS c
+                -- Une con la tabla de usuarios para obtener el nombre del autor y con publicaciones para verificar su estado.
+                INNER JOIN usuarios AS u ON u.id_usuario = c.id_usuario
+                INNER JOIN publicaciones AS p
+                    ON p.id_publicacion = c.id_publicacion
+                -- Filtra únicamente los comentarios de esa publicación siempre y cuando la publicación esté activa ('publicada').
+                WHERE c.id_publicacion = :id_publicacion
+                  AND p.estado = 'publicada'
+                -- Ordena los comentarios del más antiguo al más reciente.
+                ORDER BY c.fecha_comentario DESC, c.id_comentario DESC
+            """),
+            {"id_publicacion": id_publicacion},
+        ).mappings().all()
+
+    # Convierte cada fila obtenida en un diccionario estándar de Python para que FastAPI los devuelva en formato JSON.
+    return [dict(fila) for fila in filas]

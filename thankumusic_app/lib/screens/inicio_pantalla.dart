@@ -6,6 +6,7 @@ import '../widgets/actividad_sesion.dart';
 import '../widgets/admin_drawer.dart';
 import '../widgets/post_card.dart';
 import 'login_user_page.dart';
+import 'post_detail_page.dart';
 
 class InicioPantalla extends StatefulWidget {
   const InicioPantalla({
@@ -246,6 +247,18 @@ class _InicioPantallaState extends State<InicioPantalla> {
                                       child: Icon(Icons.broken_image_outlined),
                                     ),
                                   ),
+                            alLeer: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => PostDetailPage(
+                                    publicacion: publicacion,
+                                    registrarActividad: registrarActividad,
+                                    tokenSesion: widget.tokenSesion,
+                                    volverAlLogin: volverAlLogin,
+                                  ),
+                                ),
+                              );
+                            },
                           );
                         },
                       );
