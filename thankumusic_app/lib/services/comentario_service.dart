@@ -47,4 +47,42 @@ class ComentarioService {
     // Convierte la lista genérica al tipo estricto 'List>' esperado por el resto de la aplicación.
     return List<Map<String, dynamic>>.from(datos);
   }
+
+  // Envía un comentario nuevo al servidor para guardarlo en la publicación indicada.
+  Future<void> enviarComentario({
+    required int idPublicacion,
+    required String tokenSesion,
+    required String comentario,
+  }) async {
+    // Hace una petición POST enviando el token de sesión, avisando que el contenido va en formato JSON y con un límite de espera de 10 segundos.
+    final respuesta = await http.post(
+      Uri.parse(
+        'http://127.0.0.1:8000/publicaciones/$idPublicacion/comentarios',
+      ),
+      headers: {
+        'Authorization': 'Bearer $tokenSesion',
+        'Content-Type': 'application/json',
+      },
+      // Convierte el texto del comentario a formato JSON antes de enviarlo.
+      body: jsonEncode({'comentario': comentario}),
+    ).timeout(const Duration(seconds: 10));
+
+    // Si el servidor responde con 401, avisa que la sesión ya caducó para regresar al inicio de sesión.
+    if (respuesta.statusCode == 401) {
+      throw SesionInvalida();
+    }
+
+    // Si el servidor responde con 201, significa que el comentario se guardó bien y termina la función.
+    if (respuesta.statusCode == 201) return;
+
+    // Si hubo algún otro error, lee el mensaje de detalle que envió el servidor (por ejemplo, si el comentario iba vacío o el usuario no tiene permiso).
+    final datos = jsonDecode(utf8.decode(respuesta.bodyBytes));
+    if (datos is Map<String, dynamic> && datos['detail'] is String) {
+      throw StateError(datos['detail'] as String);
+    }
+
+    // Si el servidor no envió un mensaje específico, lanza un aviso general de error.
+    throw StateError('No se pudo publicar el comentario.');
+  }
+
 }

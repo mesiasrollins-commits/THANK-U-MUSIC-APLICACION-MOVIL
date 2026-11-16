@@ -40,11 +40,20 @@ class _PostDetailPageState extends State<PostDetailPage> {
   // Guarda la promesa (Future) con la lista de comentarios para evitar descargarlos de nuevo cada vez que se redibuje la interfaz.
   late Future<ListaComentarios> _comentarios;
 
+  final _comentarioController = TextEditingController();
+  bool _enviandoComentario = false;
+
   @override
   void initState() {
     super.initState();
     // Inicia la descarga de los comentarios una única vez al entrar a la pantalla de detalle.
     _comentarios = cargarComentarios();
+  }
+
+  @override
+  void dispose() {
+    _comentarioController.dispose();
+    super.dispose();
   }
 
   // Solicita los comentarios de la publicación actual al servicio y redirige al login si el token ya venció.
@@ -65,6 +74,70 @@ class _PostDetailPageState extends State<PostDetailPage> {
       }
       // Vuelve a lanzar el error ('rethrow') para que el FutureBuilder detecte que la carga falló.
       rethrow;
+    }
+  }
+
+  // Valida el texto escrito, envía el comentario al servidor y actualiza la lista en pantalla.
+  Future<void> publicarComentario() async {
+    // Si ya hay un envío en curso, detiene la ejecución para evitar que se mande duplicado si el usuario toca el botón varias veces.
+    if (_enviandoComentario) return;
+
+    // Toma el texto del campo y le quita los espacios sobrantes al inicio y al final.
+    final comentario = _comentarioController.text.trim();
+    // Si el texto quedó vacío, muestra un aviso rápido abajo en la pantalla (SnackBar) y cancela el envío.
+    if (comentario.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Escribe un comentario.')));
+      return;
+    }
+
+    // Activa la bandera de envío y redibuja la pantalla (por ejemplo, para deshabilitar el botón o mostrar carga mientras se envía).
+    setState(() => _enviandoComentario = true);
+
+    try {
+      // Llama al servicio enviando el ID de la publicación, el token de sesión y el texto limpio del comentario.
+      await ComentarioService().enviarComentario(
+        idPublicacion: widget.publicacion['id_publicacion'] as int,
+        tokenSesion: widget.tokenSesion,
+        comentario: comentario,
+      );
+
+      // Verifica que la pantalla siga abierta antes de intentar actualizar la interfaz.
+      if (!mounted) return;
+
+      // Limpia el cuadro de texto y vuelve a pedir los comentarios al servidor para que aparezca el nuevo.
+      _comentarioController.clear();
+      // Limpia el cuadro de texto y vuelve a pedir los comentarios al servidor para que aparezca el nuevo.
+      _comentarioController.clear();
+      final comentariosActualizados = cargarComentarios();
+
+      setState(() {
+        _comentarios = comentariosActualizados;
+      });    
+      } on SesionInvalida {
+      // Si el servidor avisó que la sesión venció, manda al usuario de vuelta al login.
+      if (!mounted) return;
+      widget.volverAlLogin(
+        context,
+        aviso: 'La sesión terminó. Inicia sesión de nuevo.',
+      );
+    } on StateError catch (error) {
+      // Si el servidor devolvió un mensaje de error controlado (como falta de permisos), lo muestra en un SnackBar.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      // Para cualquier otro fallo inesperado (como pérdida de internet), muestra un aviso general.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo publicar el comentario.')),
+      );
+    } finally {
+      // Pase lo que pase (éxito o error), al terminar vuelve a habilitar el botón de envío si la pantalla sigue abierta.
+      if (mounted) {
+        setState(() => _enviandoComentario = false);
+      }
     }
   }
 
@@ -209,6 +282,44 @@ class _PostDetailPageState extends State<PostDetailPage> {
                   ],
                 );
               },
+            ),
+            // Inserta un espacio vertical entre la lista de comentarios y el cuadro para escribir uno nuevo.
+            const SizedBox(height: 12),
+            // Coloca el campo de texto y el botón de envío uno al lado del otro en una misma fila horizontal.
+            Row(
+              children: [
+                // Hace que el cuadro de texto ocupe todo el ancho disponible dejando solo el espacio justo para el botón.
+                Expanded(
+                  child: TextField(
+                    // Conecta el campo con su controlador para leer o borrar lo que el usuario escriba.
+                    controller: _comentarioController,
+                    // Bloquea la escritura mientras el comentario anterior se está enviando al servidor.
+                    enabled: !_enviandoComentario,
+                    // Empieza con altura de 1 línea y crece automáticamente hasta 3 líneas si el texto es largo.
+                    minLines: 1,
+                    maxLines: 3,
+                    // Cada vez que el usuario teclea una letra, avisa al servidor que la sesión sigue activa.
+                    onChanged: (_) => widget.registrarActividad(context),
+                    // Configura el texto guía de fondo, el borde rectangular y reduce el margen interno ('isDense') para hacerlo más compacto.
+                    decoration: const InputDecoration(
+                      hintText: 'Escribe un comentario...',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                // Separación horizontal entre el cuadro de texto y el botón.
+                const SizedBox(width: 8),
+                // Botón principal para publicar el comentario; si ya se está enviando ('_enviandoComentario' es true), pasa 'null' para deshabilitarlo temporalmente.
+                ElevatedButton(
+                  onPressed: _enviandoComentario ? null : publicarComentario,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: rojo,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Comentar'),
+                ),
+              ],
             ),
           ],
         ),

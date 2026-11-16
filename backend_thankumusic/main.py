@@ -369,3 +369,53 @@ def listar_comentarios(id_publicacion: int):
 
     # Convierte cada fila obtenida en un diccionario estándar de Python para que FastAPI los devuelva en formato JSON.
     return [dict(fila) for fila in filas]
+
+# Define la estructura de datos que se espera recibir del usuario (un texto llamado 'comentario').
+class ComentarioRequest(BaseModel):
+    comentario: str
+
+
+# Ruta POST para guardar un comentario nuevo en una publicación y responder con código 201 (creado con éxito).
+@app.post("/publicaciones/{id_publicacion}/comentarios", status_code=201)
+def crear_comentario(
+    id_publicacion: int,
+    datos: ComentarioRequest,
+    sesion: dict = Depends(consultar_sesion),
+):
+
+    # Quita los espacios en blanco al inicio y al final; si el texto queda vacío, rechaza la petición (error 422).
+    comentario = datos.comentario.strip()
+    if not comentario:
+        raise HTTPException(
+            status_code=422,
+            detail="Escribe un comentario.",
+        )
+
+    # Abre una conexión segura a la base de datos que guarda los cambios automáticamente al terminar.
+    with engine.begin() as conexion:
+        # Inserta el comentario en la tabla solo si la publicación existe y su estado sigue siendo 'publicada'.
+        resultado = conexion.execute(
+            text("""
+                INSERT INTO comentarios
+                    (id_publicacion, id_usuario, comentario, fecha_comentario)
+                SELECT p.id_publicacion, :id_usuario, :comentario, CURRENT_TIMESTAMP
+                FROM publicaciones AS p
+                WHERE p.id_publicacion = :id_publicacion
+                  AND p.estado = 'publicada'
+            """),
+            {
+                "id_publicacion": id_publicacion,
+                "id_usuario": sesion["id_usuario"],
+                "comentario": comentario,
+            },
+        )
+
+        # Si no se guardó ninguna fila (porque la publicación no existe o fue ocultada), avisa que no está disponible (error 404).
+        if resultado.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="La publicación no está disponible.",
+            )
+
+    # Confirma a la aplicación móvil que el comentario se guardó correctamente.
+    return {"mensaje": "Comentario publicado."}
