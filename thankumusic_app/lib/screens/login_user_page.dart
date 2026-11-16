@@ -54,6 +54,12 @@ class _LoginPageState extends State<LoginPage> {
       error = 'La contraseña debe tener al menos 8 caracteres.';
     }
 
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
+
     // Variable que guardará el mensaje final (de bienvenida o de error) que se mostrará al usuario en pantalla.
     String aviso;
 
@@ -65,40 +71,40 @@ class _LoginPageState extends State<LoginPage> {
         password: password,
       );
 
-      // Inicia el bloque vigilado para intentar iniciar sesión y atrapar cualquier fallo sin que la aplicación se cierre.
-      try {
-        // Llama a la API y pausa esta función ('await') hasta recibir los datos del usuario autenticado.
-        final usuario = await authService.autenticar(
-          correo: correo,
-          password: password,
-        );
+      // Extrae el valor de 'token_sesion' que vino dentro de la respuesta del servidor al iniciar sesión.
+      final tokenSesion = usuario['token_sesion'];
 
-        // Verifica que la pantalla de login siga abierta antes de navegar; evita errores si el usuario salió mientras cargaba.
-        if (!mounted) return;
-
-        // Navega hacia la pantalla principal (InicioPantalla) reemplazando por completo la pantalla actual ('pushReplacement').
-        // Al reemplazarla, se elimina el login del historial para que el usuario no regrese a él si presiona el botón "Atrás" del celular.
-        Navigator.of(context).pushReplacement(
-          // Crea la transición estándar de pantalla completa hacia InicioPantalla, enviándole el nombre del usuario recibido del servidor.
-          MaterialPageRoute(
-            builder: (_) => InicioPantalla(nombre: usuario['nombre'] as String),
-          ),
-        );
-        // Corta la ejecución de la función aquí mismo para que no continúe hacia el código que muestra el SnackBar de error.
-        return;
-        // Atrapa los errores controlados que lanzó autenticar() (credenciales inválidas o cuenta inactiva) y guarda el mensaje exacto.
-      } on StateError catch (error) {
-        aviso = error.message;
-        // Atrapa cualquier fallo técnico de conexión (servidor apagado, sin red o tiempo agotado) y asigna un aviso claro.
-      } catch (_) {
-        aviso = 'No se pudo comunicar con el servidor.';
+      // Verifica que el dato recibido sea realmente un texto ('String') y que no venga vacío.
+      // Si el servidor respondió sin token o con un dato corrupto, lanza un error y frena el avance.
+      if (tokenSesion is! String || tokenSesion.isEmpty) {
+        throw StateError('El servidor no devolvió una sesión válida.');
       }
-      
-      // Atrapa errores controlados lanzados desde autenticar() (como "Correo o contraseña incorrectos" o "Tu cuenta no está activa").
+
+      // Envía ese token recién recibido a la ruta '/sesion' para confirmar que el backend lo reconoce como activo antes de dejar pasar al usuario.
+      await authService.comprobarSesion(tokenSesion);
+
+      // Verifica que la pantalla de login siga abierta antes de navegar; evita errores si el usuario salió mientras cargaba.
+      if (!mounted) return;
+
+      // Navega hacia la pantalla principal (InicioPantalla) reemplazando por completo la pantalla actual ('pushReplacement').
+      // Al reemplazarla, se elimina el login del historial para que el usuario no regrese a él si presiona el botón "Atrás" del celular.
+      Navigator.of(context).pushReplacement(
+        // Crea la transición estándar de pantalla completa hacia InicioPantalla, enviándole el nombre del usuario recibido del servidor.
+        MaterialPageRoute(
+          builder: (_) => InicioPantalla(
+            nombre: usuario['nombre'] as String,
+            tokenSesion: tokenSesion,
+          ),
+        ),
+      );
+
+      // Corta la ejecución de la función aquí mismo para que no continúe hacia el código que muestra el SnackBar de error.
+      return;
     } on StateError catch (error) {
+      // Atrapa errores controlados lanzados desde autenticar() (como "Correo o contraseña incorrectos" o "Tu cuenta no está activa").
       aviso = error.message;
-      // Atrapa cualquier otro fallo técnico inesperado (por ejemplo, si el servidor FastAPI está apagado, no hay internet o se agotó el tiempo de espera).
     } catch (_) {
+      // Atrapa cualquier otro fallo técnico inesperado (por ejemplo, si el servidor FastAPI está apagado, no hay internet o se agotó el tiempo de espera).
       aviso = 'No se pudo comunicar con el servidor.';
     }
 

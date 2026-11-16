@@ -192,7 +192,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
                     PrimaryButton(
                       text: 'Crear cuenta',
-                      onPressed: () {
+                      onPressed: () async {
                         // Quitamos espacios de los extremos. La contraseña se revisa tal cual.
                         final nombre = nombreController.text.trim();
                         final correo = correoController.text.trim();
@@ -228,7 +228,39 @@ class _RegisterPageState extends State<RegisterPage> {
                           return; // Detenemos el registro para que puedas corregir el campo.
                         }
 
-                        // Aquí conectaremos el guardado después.
+                        // Declara una variable de texto que puede ser nula ('String?'). Empieza vacía ('null') cuando no hay fallos, y guarda el mensaje de error si el servidor rechaza el registro para mostrarlo en pantalla.
+                        String? errorRegistro;
+
+                        try {
+                          await AuthService().registrar(
+                            nombre: nombre,
+                            correo: correo,
+                            direccion: direccion,
+                            password: password,
+                          );
+                        } on StateError catch (error) {
+                          errorRegistro = error.message;
+                        } catch (_) {
+                          errorRegistro =
+                              'No se pudo comunicar con el servidor.';
+                        }
+                        // Verifica que el widget de esta pantalla siga activo en pantalla después de esperar 
+                        //la respuesta del servidor; si el usuario ya cerró o salió de la vista, 
+                        //detiene la función para evitar errores al intentar actualizar la interfaz o navegar.
+                        if (!context.mounted) return;
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              errorRegistro ?? 'Cuenta creada correctamente.',
+                            ),
+                          ),
+                        );
+
+                        // Volvemos al login cuando FastAPI confirma que guardó la cuenta.
+                        if (errorRegistro == null) {
+                          Navigator.of(context).pop();
+                        }
                       },
                     ),
                     const SizedBox(height: 8),
