@@ -386,6 +386,9 @@ def cerrar_sesion(
 
 @app.post("/registro", status_code=201)
 def registrar_usuario(datos: RegistroRequest):
+    return guardar_usuario(datos,rol="visor")
+
+def guardar_usuario(datos: RegistroRequest, rol: str):
     nombre = datos.nombre.strip()
     correo = datos.mail.strip().lower()
     direccion = datos.direccion.strip()
@@ -429,8 +432,8 @@ def registrar_usuario(datos: RegistroRequest):
         with engine.begin() as conexion:
             conexion.execute(
                 text("""
-                    INSERT INTO usuarios (nombre, correo, direccion, password)
-                    VALUES (:nombre, :correo, :direccion, :password)
+                    INSERT INTO usuarios (nombre, correo, direccion, password, rol)
+                    VALUES (:nombre, :correo, :direccion, :password, :rol)
                 """),
                 # Diccionario con los valores reales que reemplazarán a cada marcador de posición, guardando la contraseña ya encriptada.
                 {
@@ -438,6 +441,7 @@ def registrar_usuario(datos: RegistroRequest):
                     "correo": correo,
                     "direccion": direccion,
                     "password": hash_password,
+                    "rol": rol,
                 },
             )
     except IntegrityError as error:
@@ -451,6 +455,40 @@ def registrar_usuario(datos: RegistroRequest):
         raise
 
     return {"mensaje": "Cuenta creada correctamente."}
+
+@app.post("/administradores", status_code=201)
+def registrar_administrador(
+    datos: RegistroRequest,
+    sesion: dict = Depends(consultar_sesion),
+):
+    if sesion["rol"] != "administrador":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo un administrador puede crear otra cuenta de administrador.",
+        )
+
+    return guardar_usuario(datos, rol="administrador")
+
+@app.get("/administradores/usuarios")
+def listar_usuarios(sesion: dict = Depends(consultar_sesion)):
+    # Solo un administrador con sesión válida puede consultar la lista.
+    if sesion.get("rol") != "administrador":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo un administrador puede consultar los usuarios.",
+        )
+
+    # Consulta los datos que necesita la pantalla de Gestión de usuarios.
+    with engine.connect() as conexion:
+        usuarios = conexion.execute(
+            text("""
+                SELECT id_usuario, nombre, correo, rol, estado, foto
+                FROM usuarios
+                ORDER BY nombre ASC, id_usuario ASC
+            """)
+        ).mappings().all()
+
+    return [dict(usuario) for usuario in usuarios]
 
 @app.get("/publicaciones", dependencies=[Depends(consultar_sesion)])
 def listar_publicaciones():

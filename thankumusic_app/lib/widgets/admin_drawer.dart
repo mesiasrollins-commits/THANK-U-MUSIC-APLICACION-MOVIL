@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'avatar_perfil.dart';
+
 // Define el menú lateral desplegable (Drawer) exclusivo para el panel del administrador.
 class AdminDrawer extends StatelessWidget {
   // Constructor que exige el correo del usuario conectado y la función que se ejecutará al cerrar sesión.
@@ -10,6 +12,10 @@ class AdminDrawer extends StatelessWidget {
     required this.onCerrarSesion,
     required this.onEditarPublicaciones,
     required this.onMiPerfil,
+    required this.nombre,
+    required this.onRegistrarUsuario,
+    required this.onGestionarUsuarios,
+    this.fotoUrl,
   });
 
   // Guarda el correo electrónico que se mostrará en la cabecera del menú.
@@ -19,6 +25,10 @@ class AdminDrawer extends StatelessWidget {
   final VoidCallback onCerrarSesion;
   final VoidCallback onEditarPublicaciones;
   final VoidCallback onMiPerfil;
+  final String? fotoUrl;
+  final String nombre;
+  final VoidCallback onRegistrarUsuario;
+  final VoidCallback onGestionarUsuarios;
 
   // Define el color rojo institucional reutilizable para iconos, bordes y textos destacados dentro de este menú.
   static const rojo = Color(0xFFB50020);
@@ -36,15 +46,11 @@ class AdminDrawer extends StatelessWidget {
           ListTile(
             contentPadding: const EdgeInsets.symmetric(vertical: 12),
             // Círculo rosado con el icono de perfil en el lado izquierdo.
-            leading: const CircleAvatar(
-              radius: 26,
-              backgroundColor: Color(0xFFFBD7DF),
-              child: Icon(Icons.person_outline, color: rojo, size: 32),
-            ),
+            leading: AvatarPerfil(fotoUrl: fotoUrl),
             // Título en negritas y color rojo institucional.
-            title: const Text(
-              'Administrador',
-              style: TextStyle(color: rojo, fontWeight: FontWeight.bold),
+            title: Text(
+              nombre,
+              style: const TextStyle(color: rojo, fontWeight: FontWeight.bold),
             ),
             // Muestra debajo el correo recibido por parámetro.
             subtitle: Text(correo),
@@ -66,8 +72,8 @@ class AdminDrawer extends StatelessWidget {
           ),
           // Lista de opciones del menú generadas con el método auxiliar 'opcion' (aún sin acción asignada excepto la última).
           opcion(Icons.person_outline, 'Mi perfil', onTap: onMiPerfil),
-          opcion(Icons.person_add_alt_1, 'Registrar usuario'),
-          opcion(Icons.groups_outlined, 'Gestionar usuarios'),
+          opcion(Icons.person_add_alt_1, 'Registrar usuario', onTap: onRegistrarUsuario),
+          opcion(Icons.groups_outlined, 'Gestionar usuarios', onTap: onGestionarUsuarios),
           opcion(
             Icons.post_add,
             'Agregar publicación',

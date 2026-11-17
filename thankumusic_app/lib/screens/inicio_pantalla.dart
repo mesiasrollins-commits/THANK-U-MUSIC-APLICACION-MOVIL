@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/post_service.dart';
 import '../widgets/actividad_sesion.dart';
+import '../services/perfil_service.dart';
+
 import '../widgets/admin_drawer.dart';
+import '../widgets/visor_drawer.dart';
+
 import '../widgets/post_card.dart';
 
 import 'add_blog_page.dart';
@@ -11,6 +15,8 @@ import 'mis_publicaciones.dart';
 import 'perfil_page.dart';
 import 'login_user_page.dart';
 import 'post_detail_page.dart';
+import 'register_user_page.dart';
+import 'gestionar_usuarios_page.dart';
 
 class InicioPantalla extends StatefulWidget {
   const InicioPantalla({
@@ -35,6 +41,38 @@ class InicioPantalla extends StatefulWidget {
 class _InicioPantallaState extends State<InicioPantalla> {
   // Permite abrir y cerrar el menú del Scaffold que está debajo de la barra roja.
   final _panelKey = GlobalKey<ScaffoldState>();
+
+  // Guarda la dirección web (URL) de la foto de perfil que se mostrará en el menú lateral; inicia vacía (null).
+  String? _fotoMenuUrl;
+  String? _nombreMenu;
+
+  // Consulta el perfil del usuario para obtener la URL de su foto y actualizar el menú lateral si cambió.
+  Future<void> cargarFotoMenu() async {
+    try {
+      // Pide al servidor los datos actuales del perfil usando el token de sesión activo.
+      final perfil = await PerfilService().obtenerPerfil(widget.tokenSesion);
+      // Si la pantalla se cerró mientras esperaba la respuesta del servidor, detiene la función.
+      if (!mounted) return;
+
+      // Extrae la dirección web (URL) de la foto de perfil como texto.
+      final fotoUrl = perfil['foto_url']?.toString();
+      // Obtiene el nombre del usuario como texto, usa vacío si viene nulo y elimina espacios sobrantes al inicio y al final.
+      final nombrePerfil = (perfil['nombre']?.toString() ?? '').trim();
+
+      // Actualiza la vista guardando la URL de la foto y asignando el nombre al menú (o null si quedó vacío).
+      setState(() {
+        _fotoMenuUrl = fotoUrl;
+        _nombreMenu = nombrePerfil.isEmpty ? null : nombrePerfil;
+      });
+    } on SesionInvalida {
+      // Si la sesión caducó durante la consulta y la vista sigue abierta, redirige al usuario al inicio de sesión.
+      if (mounted) {
+        volverAlLogin(context, aviso: 'La sesión terminó.');
+      }
+    } catch (_) {
+      // Si falla la consulta, podemos volver a intentar al abrir el menú.
+    }
+  }
 
   // Guarda la promesa (Future) con la lista de publicaciones para evitar que se vuelvan a descargar cada vez que se redibuja la pantalla.
   // Se marca como 'late final' porque se inicializará una única vez dentro de 'initState'.
@@ -149,14 +187,12 @@ class _InicioPantallaState extends State<InicioPantalla> {
           foregroundColor: Colors.white,
           // Quita el margen horizontal entre el icono izquierdo ('leading') y el inicio del título ('title').
           titleSpacing: 0,
-          // La hamburguesa abre el menú del administrador. Para el visor, por ahora solo se muestra el icono.
-          leading: esAdmin
-              ? IconButton(
-                  icon: const Icon(Icons.menu, size: 28),
-                  tooltip: 'Abrir menú',
-                  onPressed: () => _panelKey.currentState?.openDrawer(),
-                )
-              : const Icon(Icons.menu, size: 28),
+          // La hamburguesa abre el menú del administrador y visor
+          leading: IconButton(
+            icon: const Icon(Icons.menu, size: 28),
+            tooltip: 'Abrir menú',
+            onPressed: () => _panelKey.currentState?.openDrawer(),
+          ),
           // Alinea horizontalmente el separador y el logotipo dentro del espacio del título.
           title: Row(
             children: [
@@ -178,9 +214,16 @@ class _InicioPantallaState extends State<InicioPantalla> {
         // El menú pertenece al cuerpo para que la barra roja siga visible al abrirlo.
         body: Scaffold(
           key: _panelKey,
+          // Evento que se ejecuta cada vez que el menú lateral (Drawer) se abre o se cierra.
+          onDrawerChanged: (abierto) {
+            // Si el menú acaba de abrirse ('abierto == true'), vuelve a consultar la foto de perfil por si se actualizó recientemente.
+            if (abierto) cargarFotoMenu();
+          },
           drawer: esAdmin
               ? AdminDrawer(
                   correo: widget.correo,
+                  fotoUrl: _fotoMenuUrl,
+                  nombre: _nombreMenu ?? widget.nombre,
                   // Acción que se ejecuta al tocar la opción para agregar una nueva publicación desde el menú lateral.
                   onAgregarPublicacion: () async {
                     // Cierra el menú lateral (Drawer) si está abierto antes de cambiar de pantalla.
@@ -245,12 +288,45 @@ class _InicioPantallaState extends State<InicioPantalla> {
 
                   onMiPerfil: abrirPerfil,
 
+                  onRegistrarUsuario: () {
+                    _panelKey.currentState?.closeDrawer();
+
+                    Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => RegisterPage(
+                          tokenAdministrador: widget.tokenSesion,
+                          registrarActividad: registrarActividad,
+                          volverAlLogin: volverAlLogin,
+                        ),
+                      ),
+                    );
+                  },
+                  onGestionarUsuarios: () {
+                    // Cierra el menú lateral antes de abrir Gestión de usuarios.
+                    _panelKey.currentState?.closeDrawer();
+
+                    Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => GestionarUsuariosPage(
+                          registrarActividad: registrarActividad,
+                        ),
+                      ),
+                    );
+                  },
                   onCerrarSesion: () {
                     _panelKey.currentState?.closeDrawer();
                     cerrarSesion(context);
                   },
                 )
-              : null,
+              : VisorDrawer(
+                  onMiPerfil: abrirPerfil,
+                  fotoUrl: _fotoMenuUrl,
+                  nombre: _nombreMenu ?? widget.nombre,
+                  onCerrarSesion: () {
+                    _panelKey.currentState?.closeDrawer();
+                    cerrarSesion(context);
+                  },
+                ),
           // Define el color de fondo general de la pantalla en un tono rosado muy claro.
           backgroundColor: const Color(0xFFFFF5F7),
           // Agrega un margen interior alrededor de todo el contenido principal (izquierda, arriba, derecha y abajo).

@@ -93,6 +93,7 @@ class AuthService {
   // Método asíncrono que verifica con el servidor FastAPI si el token de sesión guardado sigue vigente.
   // No devuelve datos ('Future<void>'); si la sesión sigue activa termina en silencio, y si no, lanza un error.
   Future<void> comprobarSesion(String tokenSesion) async {
+    // Define la ruta de destino según si existe un token de administrador: si es nulo envía a '/registro', de lo contrario a '/administradores'.
     // Hace una petición HTTP GET a la ruta '/sesion' del backend y espera ('await') la respuesta.
     final respuesta = await http
         .get(
@@ -116,7 +117,7 @@ class AuthService {
   }
 
   // Registra que el usuario sigue activo y renueva su sesión en el servidor, limitando los envíos a máximo una petición por minuto.
-  Future<void> registrarActividad(String tokenSesion) async {
+    Future<void> registrarActividad(String tokenSesion) async {
     // Si el cronómetro ya está corriendo y aún no pasa 1 minuto desde el último aviso al servidor, sale de la función sin hacer nada para evitar saturar la red.
     if (_tiempoDesdeUltimaConsulta.isRunning &&
         _tiempoDesdeUltimaConsulta.elapsed < const Duration(minutes: 1)) {
@@ -158,14 +159,22 @@ class AuthService {
     required String correo,
     required String direccion,
     required String password,
+    String? tokenAdministrador,
+
   }) async {
+    // Elegimos la ruta según si el registro viene del login o del menú de administrador.
+    final ruta = tokenAdministrador == null ? '/registro' : '/administradores';
     // Envía una petición HTTP POST a la ruta '/registro' del servidor FastAPI y espera ('await') la respuesta.
     final respuesta = await http
         .post(
           // Convierte la dirección web en texto a un objeto Uri que Flutter entiende.
-          Uri.parse('http://127.0.0.1:8000/registro'),
+          Uri.parse('http://127.0.0.1:8000$ruta'),
           // Le avisa al servidor que los datos enviados en el cuerpo van en formato JSON.
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json',
+            if (tokenAdministrador != null)
+              'Authorization': 'Bearer $tokenAdministrador',
+          },
           // Convierte el mapa de datos de Dart a una cadena de texto JSON con las llaves exactas que espera RegistroRequest en FastAPI.
           body: jsonEncode({
             'nombre': nombre,
@@ -176,6 +185,8 @@ class AuthService {
         )
         // Si el servidor tarda más de 10 segundos en responder, cancela la petición para evitar que la pantalla se quede congelada.
         .timeout(const Duration(seconds: 10));
+
+    if (respuesta.statusCode == 401) throw SesionInvalida();
 
     // Si FastAPI responde con código 201 (Creado), significa que el usuario se guardó correctamente en la base de datos y termina el método con éxito.
     if (respuesta.statusCode == 201) {
