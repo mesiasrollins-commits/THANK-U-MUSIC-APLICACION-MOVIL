@@ -308,7 +308,9 @@ class _InicioPantallaState extends State<InicioPantalla> {
                     Navigator.of(context).push<void>(
                       MaterialPageRoute<void>(
                         builder: (_) => GestionarUsuariosPage(
+                          tokenSesion: widget.tokenSesion,
                           registrarActividad: registrarActividad,
+                          volverAlLogin: volverAlLogin,
                         ),
                       ),
                     );
@@ -423,15 +425,6 @@ class _InicioPantallaState extends State<InicioPantalla> {
                         },
                       );
                     },
-                  ),
-                ),
-
-                // Centra horizontalmente el botón dentro del ancho disponible de la pantalla.
-                Center(
-                  child: ElevatedButton(
-                    // Al presionar el botón, llama a la función 'cerrarSesion' pasándole el contexto actual.
-                    onPressed: () => cerrarSesion(context),
-                    child: const Text('Cerrar sesión'),
                   ),
                 ),
               ],

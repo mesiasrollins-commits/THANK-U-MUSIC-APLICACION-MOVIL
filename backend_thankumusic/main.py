@@ -35,6 +35,7 @@ from urllib.parse import quote
 from pathlib import Path
 # Importa 'uuid4' para generar identificadores únicos aleatorios (útil para nombrar archivos subidos sin que se sobrescriban).
 from uuid import uuid4
+from typing import Literal
 
 
 app = FastAPI(title="API Thank U Music")
@@ -488,7 +489,80 @@ def listar_usuarios(sesion: dict = Depends(consultar_sesion)):
             """)
         ).mappings().all()
 
-    return [dict(usuario) for usuario in usuarios]
+# Usa la misma dirección base de las fotos que Mi perfil y le quita la barra diagonal final si existe.
+    url_base = getenv("PORTADAS_BASE_URL", "").rstrip("/")
+    # Crea una lista vacía para guardar los datos de cada usuario ya procesados.
+    lista_usuarios = []
+
+    # Recorre cada registro de usuario obtenido de la base de datos.
+    for usuario in usuarios:
+        # Convierte el registro en un diccionario modificable de Python.
+        datos = dict(usuario)
+        # Obtiene el nombre del archivo de imagen guardado en la columna 'foto'.
+        foto = datos["foto"]
+
+        # Arma la dirección de la foto de esta cuenta codificando caracteres especiales del nombre del archivo; si no tiene foto o falta la URL base, asigna None.
+        datos["foto_url"] = (
+            f"{url_base}/{quote(Path(foto).name, safe='')}"
+            if url_base and foto
+            else None
+        )
+        # Agrega el diccionario del usuario con su enlace de foto a la lista final.
+        lista_usuarios.append(datos)
+
+    # Devuelve la lista completa de usuarios lista para enviarse como respuesta JSON.
+    return lista_usuarios
+
+# Modelo que valida los datos recibidos: acepta únicamente 'visor' o 'administrador' para el rol, y 'activo' o 'baneado' para el estado.
+class EditarUsuarioRequest(BaseModel):
+    rol: Literal["visor", "administrador"] | None = None
+    estado: Literal["activo", "baneado"] | None = None
+
+
+# Ruta PATCH que actualiza el rol o el estado de un usuario específico según el parámetro recibido en la dirección.
+@app.patch("/administradores/usuarios/{id_usuario}/{campo}")
+def editar_usuario(
+    id_usuario: int,
+    campo: Literal["rol", "estado"],
+    datos: EditarUsuarioRequest,
+    sesion: dict = Depends(consultar_sesion),
+):
+    # Solo un administrador con sesión válida puede editar usuarios.
+    if sesion.get("rol") != "administrador":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo un administrador puede editar usuarios.",
+        )
+
+    # Elegimos qué dato guardar según la ruta que llamó Flutter.
+    if campo == "rol":
+        valor = datos.rol
+        consulta = text("UPDATE usuarios SET rol = :valor WHERE id_usuario = :id")
+    else:
+        valor = datos.estado
+        consulta = text("UPDATE usuarios SET estado = :valor WHERE id_usuario = :id")
+
+    # Si el cliente envió vacío el valor correspondiente a la ruta elegida, devuelve un error de validación (422).
+    if valor is None:
+        raise HTTPException(status_code=422, detail=f"Envía el campo {campo}.")
+
+    # Abre una transacción segura en la base de datos.
+    with engine.begin() as conexion:
+        # Busca al usuario y bloquea temporalmente su fila ('FOR UPDATE') para evitar cambios simultáneos conflictivos.
+        usuario = conexion.execute(
+            text("SELECT id_usuario FROM usuarios WHERE id_usuario = :id FOR UPDATE"),
+            {"id": id_usuario},
+        ).scalar_one_or_none()
+
+        # Si el identificador no existe en la tabla, detiene la operación y devuelve error 404.
+        if usuario is None:
+            raise HTTPException(status_code=404, detail="El usuario no existe.")
+
+        # Ejecuta la actualización del campo elegido (rol o estado) en la base de datos.
+        conexion.execute(consulta, {"valor": valor, "id": id_usuario})
+
+    # Devuelve el identificador del usuario junto con el campo y el nuevo valor guardado.
+    return {"id_usuario": id_usuario, campo: valor}
 
 @app.get("/publicaciones", dependencies=[Depends(consultar_sesion)])
 def listar_publicaciones():
