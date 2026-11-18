@@ -54,7 +54,7 @@ Los siguientes comandos están escritos para PowerShell en Windows.
 ## 1. Descargar el repositorio
 
 ```powershell
-git clone [URL_DEL_REPOSITORIO]
+git clone https://github.com/mesiasrollins-commits/THANK-U-MUSIC-APLICACION-MOVIL.git
 cd [CARPETA_DEL_REPOSITORIO]
 ```
 
@@ -78,12 +78,11 @@ Importar el script `bd_thankumusic.sql` incluido en el repositorio.
 La base de datos se llama `bd_thankumusic` y contiene estas tablas:
 
 | Tabla | Información |
-| --- | --- |
 | usuarios | Datos de la cuenta, contraseña, rol, estado y fotografía. |
 | publicaciones | Título, contenido, imagen, etiquetas y autor. |
 | comentarios | Comentarios relacionados con usuarios y publicaciones. |
 
-El script de creación genera la estructura. Si no incluye datos de ejemplo, será necesario registrar usuarios y crear publicaciones para probar la aplicación.
+El script de creación genera la estructura. 
 
 ## 3. Instalar las dependencias del backend
 
