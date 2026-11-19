@@ -405,9 +405,19 @@ class _InicioPantallaState extends State<InicioPantalla> {
                                     webHtmlElementStrategy:
                                         WebHtmlElementStrategy.prefer,
                                     // Si la imagen no existe o falla al descargarse, muestra un icono de imagen rota centrado en lugar de arrojar un error en pantalla.
-                                    errorBuilder: (_, __, ___) => const Center(
-                                      child: Icon(Icons.broken_image_outlined),
-                                    ),
+                                    errorBuilder: (_, error, __) {
+                                      // Muestra la dirección solicitada y el motivo del fallo en la consola.
+                                      debugPrint('URL de portada: $imagenUrl');
+                                      debugPrint(
+                                        'Error al cargar portada: $error',
+                                      );
+
+                                      return const Center(
+                                        child: Icon(
+                                          Icons.broken_image_outlined,
+                                        ),
+                                      );
+                                    },
                                   ),
                             alLeer: () {
                               Navigator.of(context).push(

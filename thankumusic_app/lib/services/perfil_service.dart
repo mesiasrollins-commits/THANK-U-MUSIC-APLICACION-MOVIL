@@ -7,6 +7,9 @@ import 'package:http/http.dart' as http;
 // Importa la excepción 'SesionInvalida' definida en el servicio de autenticación.
 import 'auth_service.dart';
 
+import 'api_config.dart';
+
+
 // Clase encargada de comunicarse con el servidor para obtener la información de la cuenta del usuario.
 class PerfilService {
   // Consulta los datos de la cuenta que inició sesión.
@@ -14,7 +17,7 @@ class PerfilService {
     // Envía una petición GET a la ruta '/perfil' incluyendo el token de autorización y corta la espera si tarda más de 10 segundos.
     final respuesta = await http
         .get(
-          Uri.parse('http://127.0.0.1:8000/perfil'),
+          Uri.parse('$apiBaseUrl/perfil'),
           headers: {'Authorization': 'Bearer $tokenSesion'},
         )
         .timeout(const Duration(seconds: 10));
@@ -49,7 +52,7 @@ class PerfilService {
   }) async {
     final respuesta = await http
         .patch(
-          Uri.parse('http://127.0.0.1:8000/perfil'),
+          Uri.parse('$apiBaseUrl/perfil'),
           headers: {
             'Authorization': 'Bearer $tokenSesion',
             'Content-Type': 'application/json',
@@ -82,7 +85,7 @@ class PerfilService {
   }) async {
     final solicitud = http.MultipartRequest(
       'POST',
-      Uri.parse('http://127.0.0.1:8000/perfil/foto'),
+      Uri.parse('$apiBaseUrl/perfil/foto'),
     );
 
 // Agrega el token de autorización en la cabecera de la petición para identificar al usuario conectado.

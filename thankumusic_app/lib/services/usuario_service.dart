@@ -4,12 +4,15 @@ import 'package:http/http.dart' as http;
 
 import 'auth_service.dart';
 
+import 'api_config.dart';
+
+
 class UsuarioService {
   // Pide la lista de usuarios usando el token de la sesión actual.
   Future<List<Map<String, dynamic>>> obtenerUsuarios(String tokenSesion) async {
     final respuesta = await http
         .get(
-          Uri.parse('http://127.0.0.1:8000/administradores/usuarios'),
+          Uri.parse('$apiBaseUrl/administradores/usuarios'),
           headers: {'Authorization': 'Bearer $tokenSesion'},
         )
         .timeout(const Duration(seconds: 10));
@@ -44,7 +47,7 @@ class UsuarioService {
     final respuesta = await http
         .patch(
           Uri.parse(
-            'http://127.0.0.1:8000/administradores/usuarios/$idUsuario/$campo',
+            '$apiBaseUrl/administradores/usuarios/$idUsuario/$campo',
           ),
           headers: {
             'Authorization': 'Bearer $tokenSesion',

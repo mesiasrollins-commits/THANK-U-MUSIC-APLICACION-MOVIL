@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'api_config.dart';
+
 class SesionInvalida extends StateError {
   SesionInvalida() : super('La sesión es inválida o venció.');
 }
@@ -64,7 +66,7 @@ class AuthService {
     final respuesta = await http
         .post(
           // Convierte la dirección web en texto a un objeto Uri que Flutter entiende.
-          Uri.parse('http://127.0.0.1:8000/login'),
+          Uri.parse('$apiBaseUrl/login'),
           // Avisa al servidor FastAPI que los datos viajan en formato JSON.
           headers: {'Content-Type': 'application/json'},
           // Convierte el diccionario de Dart a texto JSON; usa la llave 'mail' porque así la espera LoginRequest en FastAPI.
@@ -98,7 +100,7 @@ class AuthService {
     final respuesta = await http
         .get(
           // Convierte la dirección web en texto a un objeto Uri que Flutter entiende.
-          Uri.parse('http://127.0.0.1:8000/sesion'),
+          Uri.parse('$apiBaseUrl/sesion'),
           // Envía el token en el encabezado 'Authorization' con el formato estándar 'Bearer <token>' que espera HTTPBearer en FastAPI.
           headers: {'Authorization': 'Bearer $tokenSesion'},
           // Si el servidor tarda más de 10 segundos en responder, cancela la petición para que la app no se quede trabada.
@@ -140,7 +142,7 @@ class AuthService {
     final respuesta = await http
         .post(
           // Convierte la dirección web en texto a un objeto Uri que Flutter entiende.
-          Uri.parse('http://127.0.0.1:8000/logout'),
+          Uri.parse('$apiBaseUrl/logout'),
           // Envía el token en el encabezado 'Authorization' con el formato estándar 'Bearer <token>' que espera HTTPBearer en FastAPI.
           headers: {'Authorization': 'Bearer $tokenSesion'},
           // Si el servidor tarda más de 10 segundos en responder, cancela la petición para evitar que la app se quede cargando indefinidamente.
@@ -168,7 +170,7 @@ class AuthService {
     final respuesta = await http
         .post(
           // Convierte la dirección web en texto a un objeto Uri que Flutter entiende.
-          Uri.parse('http://127.0.0.1:8000$ruta'),
+          Uri.parse('$apiBaseUrl$ruta'),
           // Le avisa al servidor que los datos enviados en el cuerpo van en formato JSON.
           headers: {
             'Content-Type': 'application/json',

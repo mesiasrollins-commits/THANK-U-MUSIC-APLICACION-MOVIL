@@ -205,6 +205,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   final correo = correoController.text.trim();
                   final direccion = direccionController.text.trim();
                   final password = passwordController.text;
+                  final confirmarPassword = confirmarPasswordController.text;
                   final formatoCorreo = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
                   String? error;
@@ -212,7 +213,8 @@ class _RegisterPageState extends State<RegisterPage> {
                   if (nombre.isEmpty ||
                       correo.isEmpty ||
                       direccion.isEmpty ||
-                      password.isEmpty) {
+                      password.isEmpty
+                      || confirmarPassword.isEmpty) {
                     error = 'Completa todos los campos.';
                   } else if (!formatoCorreo.hasMatch(correo)) {
                     error = 'Escribe un correo electrónico válido.';
@@ -233,6 +235,10 @@ class _RegisterPageState extends State<RegisterPage> {
                   } else if (password.runes.length < 8) {
                     error = 'La contraseña debe tener al menos 8 caracteres.';
                   }
+                  else if (password != confirmarPassword) {
+                  // Compara las contraseñas tal como se escribieron.
+                  error = 'Las contraseñas no coinciden.';
+}
 
                   if (error != null) {
                     ScaffoldMessenger.of(context)

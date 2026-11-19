@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 // Importa el servicio de autenticación para reutilizar la excepción personalizada 'SesionInvalida'.
 import 'auth_service.dart';
 
+import 'api_config.dart';
+
 // Crea un alias de tipo ('typedef') para abreviar la escritura de 'List>' como 'ListaComentarios'.
 typedef ListaComentarios = List<Map<String, dynamic>>;
 
@@ -21,7 +23,7 @@ class ComentarioService {
     // Si el servidor tarda más de 10 segundos en responder, cancela la espera lanzando un error de tiempo agotado ('TimeoutException').
     final respuesta = await http.get(
       Uri.parse(
-        'http://127.0.0.1:8000/publicaciones/$idPublicacion/comentarios',
+        '$apiBaseUrl/publicaciones/$idPublicacion/comentarios',
       ),
       headers: {'Authorization': 'Bearer $tokenSesion'},
     ).timeout(const Duration(seconds: 10));
@@ -57,7 +59,7 @@ class ComentarioService {
     // Hace una petición POST enviando el token de sesión, avisando que el contenido va en formato JSON y con un límite de espera de 10 segundos.
     final respuesta = await http.post(
       Uri.parse(
-        'http://127.0.0.1:8000/publicaciones/$idPublicacion/comentarios',
+        'http://$apiBaseUrl/publicaciones/$idPublicacion/comentarios',
       ),
       headers: {
         'Authorization': 'Bearer $tokenSesion',
@@ -93,7 +95,7 @@ class ComentarioService {
     // Realiza la solicitud DELETE indicando el ID de la publicación y del comentario, enviando el token de sesión en la cabecera y cortando si tarda más de 10 segundos.
     final respuesta = await http.delete(
       Uri.parse(
-        'http://127.0.0.1:8000/publicaciones/$idPublicacion/comentarios/$idComentario',
+        'http://$apiBaseUrl/publicaciones/$idPublicacion/comentarios/$idComentario',
       ),
       headers: {'Authorization': 'Bearer $tokenSesion'},
     ).timeout(const Duration(seconds: 10));

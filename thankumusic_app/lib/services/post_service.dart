@@ -7,6 +7,9 @@ import 'package:http/http.dart' as http;
 // Reutiliza la excepción 'SesionInvalida' definida en el servicio de autenticación.
 import 'auth_service.dart';
 
+import 'api_config.dart';
+
+
 /// Servicio encargado de consultar las publicaciones desde la API.
 class PostService {
   /// Descarga la lista de publicaciones enviando el token del usuario.
@@ -18,7 +21,7 @@ class PostService {
     // Hace la petición GET con el token de autorización y un límite de espera de 10 segundos.
     final respuesta = await http
         .get(
-          Uri.parse('http://127.0.0.1:8000$ruta'),
+          Uri.parse('$apiBaseUrl$ruta'),
           headers: {'Authorization': 'Bearer $tokenSesion'},
         )
         .timeout(const Duration(seconds: 10));
@@ -57,7 +60,7 @@ class PostService {
     // Crea una petición especial de tipo 'MultipartRequest', necesaria cuando se envían textos y archivos juntos en un mismo formulario.
     final solicitud = http.MultipartRequest(
       'POST',
-      Uri.parse('http://127.0.0.1:8000/publicaciones'),
+      Uri.parse('$apiBaseUrl/publicaciones'),
     );
 
     // Agrega el token de sesión en la cabecera para que el servidor compruebe que el usuario tiene permiso de administrador.
@@ -112,7 +115,7 @@ class PostService {
     // Prepara una petición de formulario con archivos (MultipartRequest) usando el método PATCH hacia la ruta de esa publicación específica.
     final solicitud = http.MultipartRequest(
       'PATCH',
-      Uri.parse('http://127.0.0.1:8000/publicaciones/$idPublicacion'),
+      Uri.parse('$apiBaseUrl/publicaciones/$idPublicacion'),
     );
 
     // Agrega el token de sesión en la cabecera y carga los campos de texto actualizados (convirtiendo 'publicar' a texto).
