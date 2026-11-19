@@ -59,7 +59,7 @@ class ComentarioService {
     // Hace una petición POST enviando el token de sesión, avisando que el contenido va en formato JSON y con un límite de espera de 10 segundos.
     final respuesta = await http.post(
       Uri.parse(
-        'http://$apiBaseUrl/publicaciones/$idPublicacion/comentarios',
+        '$apiBaseUrl/publicaciones/$idPublicacion/comentarios',
       ),
       headers: {
         'Authorization': 'Bearer $tokenSesion',
@@ -95,7 +95,7 @@ class ComentarioService {
     // Realiza la solicitud DELETE indicando el ID de la publicación y del comentario, enviando el token de sesión en la cabecera y cortando si tarda más de 10 segundos.
     final respuesta = await http.delete(
       Uri.parse(
-        'http://$apiBaseUrl/publicaciones/$idPublicacion/comentarios/$idComentario',
+        '$apiBaseUrl/publicaciones/$idPublicacion/comentarios/$idComentario',
       ),
       headers: {'Authorization': 'Bearer $tokenSesion'},
     ).timeout(const Duration(seconds: 10));
