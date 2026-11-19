@@ -148,14 +148,6 @@ Si están dentro de otra carpeta o tienen otro nombre, ajusta las rutas de los s
 5. Elige el script `bd_thankumusic.sql` del proyecto.
 6. Presiona **Importar** para ejecutarlo.
 
-Comprueba que exista la base `bd_thankumusic` con estas tablas:
-
-- `usuarios`
-- `publicaciones`
-- `comentarios`
-
-Si el script solo contiene la estructura, las tablas estarán vacías. Más adelante podrás registrar una cuenta y crear publicaciones.
-
 ## 3. Instalar las dependencias
 
 En PowerShell, desde la carpeta que contiene `backend_thankumusic` y `thankumusic_app`, pega esta línea completa:
@@ -189,7 +181,7 @@ No broken requirements found.
 
 ## 4. Configurar el backend
 
-Dentro de `backend_thankumusic`, crea un archivo llamado `.env`. Asegúrate de que no termine en `.txt`.
+Dentro de `backend_thankumusic`, crea un archivo llamado `.env`.
 
 Pega lo siguiente:
 
@@ -222,8 +214,6 @@ C:\xampp\htdocs\thankumusicv1\uploads
 
 Si utilizas otro nombre de carpeta, cambia las dos rutas de imágenes en `.env`.
 
-Para mostrar fotografías de publicaciones anteriores, copia sus archivos a `uploads`. **Importar la base de datos no copia las imágenes.**
-
 ## 5. Ejecutar FastAPI
 
 Desde la carpeta principal del proyecto, entra al backend:
@@ -244,7 +234,7 @@ http://127.0.0.1:8000/docs
 
 Si aparece la documentación de FastAPI, el servidor está respondiendo.
 
-**Mantén esta terminal abierta mientras utilizas la aplicación.**
+Mantén esta terminal abierta mientras utilizas la aplicación.
 
 ## 6. Ejecutar Flutter en Chrome
 
@@ -270,113 +260,6 @@ Durante las pruebas deben seguir funcionando:
 - **Apache**, para mostrar las imágenes.
 - **FastAPI**, para recibir las peticiones de Flutter.
 
-## 7. Registrar una cuenta y comprobar el funcionamiento
-
-1. Abre la opción de registro.
-2. Completa los datos solicitados.
-3. Registra la cuenta.
-4. Inicia sesión con el correo y la contraseña registrados.
-5. Revisa las publicaciones disponibles.
-6. Abre una publicación y envía un comentario.
-7. Entra al perfil y prueba actualizar tus datos.
-8. Cierra sesión.
-
-Si todavía no existen publicaciones, prepara una cuenta de administrador para agregarlas.
-
-### Preparar la primera cuenta de administrador
-
-Primero registra una cuenta desde la aplicación.
-
-Después abre phpMyAdmin, selecciona `bd_thankumusic`, entra a **SQL** y ejecuta:
-
-```sql
-UPDATE usuarios
-SET rol = 'administrador'
-WHERE correo = 'correo_de_tu_cuenta@ejemplo.com';
-```
-
-Cambia el correo del ejemplo por el de la cuenta que registraste.
-
-Cierra sesión y vuelve a entrar. Desde las opciones de administrador podrás crear una publicación con su título, contenido, etiqueta y portada.
-
-Después comprueba que aparezca en el inicio y que permita consultar y enviar comentarios.
-
-## 8. Ejecutar en Android por USB de forma opcional
-
-La aplicación también puede probarse en un celular Android.
-
-### Instalar las herramientas de Android
-
-1. Descarga e instala [Android Studio](https://developer.android.com/studio).
-2. Abre **SDK Manager**.
-3. Instala la plataforma Android que requiera el proyecto y las herramientas **SDK Build-Tools**, **SDK Command-line Tools** y **SDK Platform-Tools**.
-4. Si la compilación solicita el NDK `28.2.13676358`, instala esa versión desde **SDK Tools → Show Package Details → NDK (Side by side)**.
-5. En PowerShell ejecuta:
-
-```powershell
-flutter doctor --android-licenses
-flutter doctor
-```
-
-Acepta las licencias cuando se solicite.
-
-### Conectar el celular
-
-1. Conecta la computadora y el celular a la misma red Wi-Fi.
-2. Activa las **Opciones de desarrollador** y la **Depuración USB**.
-3. Conecta el celular con un cable de datos.
-4. Acepta la autorización de depuración en el teléfono.
-
-Desde la carpeta de Flutter ejecuta:
-
-```powershell
-flutter devices
-```
-
-Copia el ID del celular que aparezca en la lista.
-
-### Configurar la conexión
-
-En otra terminal ejecuta:
-
-```powershell
-ipconfig
-```
-
-Busca la IPv4 del adaptador Wi-Fi de la computadora.
-
-Por ejemplo:
-
-```text
-192.168.1.25
-```
-
-Desde el navegador del celular comprueba que abra:
-
-```text
-http://192.168.1.25:8000/docs
-```
-
-Usa la IP real de tu computadora.
-
-En el `.env` del backend cambia también la dirección de las imágenes:
-
-```dotenv
-PORTADAS_BASE_URL=http://192.168.1.25/thankumusicv1/uploads
-```
-
-Conserva `PORTADAS_DIRECTORIO` con la ruta física de Windows y reinicia FastAPI para cargar el cambio.
-
-Después ejecuta desde `thankumusic_app`:
-
-```powershell
-flutter run -d ID_DEL_CELULAR --dart-define=API_BASE_URL=http://192.168.1.25:8000
-```
-
-Sustituye el ID y la IP por los de tus equipos.
-
-En Android, la dirección de la API y de las imágenes debe apuntar a la computadora. `localhost` en el teléfono apunta al propio teléfono.
-
 ## Referencia de la configuración inicial del proyecto
 
 Este apartado explica cómo preparar una estructura nueva durante el desarrollo. Si descargaste el proyecto terminado con `git clone`, continúa utilizando sus archivos existentes.
@@ -401,53 +284,6 @@ cd ..
 En `backend_thankumusic` se crean `main.py`, `database.py` y `.env`. Después se prepara el entorno de Python y se instalan los paquetes descritos en el paso 3.
 
 Estos comandos crean la estructura inicial. Las pantallas, los servicios, las rutas y las consultas del blog se desarrollan dentro de esos archivos y carpetas.
-
-### Guardar el desarrollo en GitHub
-
-Para publicar por primera vez un proyecto local en un repositorio nuevo y vacío:
-
-1. Crea el repositorio en GitHub.
-2. En la carpeta principal del proyecto, crea un archivo `.gitignore`.
-3. Agrega estas líneas:
-
-```gitignore
-.venv/
-venv/
-__pycache__/
-*.pyc
-.env
-.dart_tool/
-build/
-```
-
-Esto evita subir el entorno virtual, la configuración privada y los archivos generados.
-
-Configura tu nombre y correo en Git:
-
-```powershell
-git config --global user.name "Tu nombre"
-git config --global user.email "tu_correo@ejemplo.com"
-```
-
-Después, desde la carpeta principal:
-
-```powershell
-git init
-git add .
-git commit -m "Primera version de Thank U Music"
-git branch -M main
-```
-
-Vincula el repositorio y sube los archivos, reemplazando la URL por la de tu repositorio nuevo:
-
-```powershell
-git remote add origin https://github.com/TU_USUARIO/TU_REPOSITORIO.git
-git push -u origin main
-```
-
-Completa el inicio de sesión de GitHub si se solicita.
-
-Este procedimiento corresponde a la publicación inicial. Al utilizar `git clone`, la conexión con el repositorio ya viene configurada.
 
 ## Problemas frecuentes
 
