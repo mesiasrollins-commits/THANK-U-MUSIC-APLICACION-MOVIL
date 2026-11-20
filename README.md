@@ -249,52 +249,64 @@ Ejecuta:
 ```powershell
 flutter run -d chrome --web-port=8080 --dart-define=API_BASE_URL=http://127.0.0.1:8000
 ```
-
-La aplicación utiliza `API_BASE_URL` para conocer la dirección del backend. Los servicios del proyecto deben leer este valor mediante su configuración `api_config.dart`.
-
-Espera a que Chrome abra la aplicación.
-
-Durante las pruebas deben seguir funcionando:
-
-- **MySQL**, para guardar y consultar información.
-- **Apache**, para mostrar las imágenes.
-- **FastAPI**, para recibir las peticiones de Flutter.
-
-## Referencia de la configuración inicial del proyecto
-
-Este apartado explica cómo preparar una estructura nueva durante el desarrollo. Si descargaste el proyecto terminado con `git clone`, continúa utilizando sus archivos existentes.
-
-Para generar una estructura inicial:
-
-```powershell
-mkdir APP_THANKUMUSIC
-cd APP_THANKUMUSIC
-flutter create thankumusic_app
-mkdir backend_thankumusic
-```
-
-Dentro de `thankumusic_app` se agregan los paquetes utilizados por la aplicación:
-
-```powershell
-cd thankumusic_app
-flutter pub add http image_picker
-cd ..
-```
-
-En `backend_thankumusic` se crean `main.py`, `database.py` y `.env`. Después se prepara el entorno de Python y se instalan los paquetes descritos en el paso 3.
-
-Estos comandos crean la estructura inicial. Las pantallas, los servicios, las rutas y las consultas del blog se desarrollan dentro de esos archivos y carpetas.
-
+y listo, API y aplicacion funcionan correctamente
 ## Problemas frecuentes
 
-| Problema | Qué revisar |
-|---|---|
-| No se reconoce `flutter` | Revisa el PATH y abre nuevamente la terminal. |
-| No encuentra `pubspec.yaml` | Ejecuta Flutter dentro de `thankumusic_app`. |
-| La aplicación no conecta | Comprueba MySQL, FastAPI y la dirección de la API. |
-| Las imágenes no cargan | Revisa Apache, los archivos de `uploads` y `PORTADAS_BASE_URL`. |
-| El celular no aparece | Revisa la depuración USB, el cable y la autorización del teléfono. |
-| Cambiaste la IP y sigue usando la anterior | Detén Flutter y ejecútalo otra vez con el comando completo. |
+  - **Problema:** No se reconoce `flutter`.
+  
+    **Solución:** Revisa que la carpeta `flutter\bin` esté agregada al PATH. Cierra y vuelve a abrir la terminal.
+  
+  - **Problema:** No se reconoce `py`.
+  
+    **Solución:** Reinicia Visual Studio Code y vuelve a ejecutar el comando de instalación. En ocasiones, el editor no reconoce correctamente Python.
+  
+  - **Problema:** No se reconoce `git`.
+  
+    **Solución:** Comprueba que Git esté instalado y reinicia Visual Studio Code.
+  
+  - **Problema:** No encuentra `pubspec.yaml`.
+  
+    **Solución:** Comprueba que estés ejecutando los comandos dentro de la carpeta `thankumusic_app`.
+  
+  - **Problema:** Aparece un error al instalar las dependencias.
+  
+    **Solución:** Comprueba tu conexión a internet y vuelve a ejecutar el comando de instalación desde la carpeta principal del proyecto.
+  
+  - **Problema:** La aplicación no conecta con el backend.
+  
+    **Solución:** Comprueba que MySQL y FastAPI estén funcionando y que `API_BASE_URL` tenga la dirección correcta.
+  
+  - **Problema:** No abre la documentación de FastAPI.
+  
+    **Solución:** Comprueba que el backend esté ejecutándose en el puerto `8000` y abre `http://127.0.0.1:8000/docs`.
+  
+  - **Problema:** Aparece un error de conexión con MySQL.
+  
+    **Solución:** Inicia MySQL desde XAMPP y revisa los datos de conexión del archivo `.env`.
+  
+  - **Problema:** No encuentra la base de datos.
+  
+    **Solución:** Comprueba que hayas importado `bd_thankumusic.sql` y que `DB_NAME` tenga el nombre correcto.
+  
+  - **Problema:** Las imágenes no cargan.
+  
+    **Solución:** Comprueba que Apache esté iniciado, que exista la carpeta `uploads` y que `PORTADAS_BASE_URL` tenga la dirección correcta.
+  
+  - **Problema:** No encuentra el archivo `.env`.
+  
+    **Solución:** Comprueba que esté dentro de `backend_thankumusic`, junto a `main.py` y `database.py`.
+  
+  - **Problema:** El puerto `8000` está ocupado.
+  
+    **Solución:** Cierra el proceso que esté utilizando ese puerto antes de iniciar FastAPI nuevamente.
+  
+  - **Problema:** Chrome no aparece como dispositivo disponible.
+  
+    **Solución:** Comprueba que Google Chrome esté instalado y ejecuta `flutter doctor`.
+  
+  - **Problema:** Cambiaste la IP y la aplicación sigue utilizando la anterior.
+  
+    **Solución:** Detén Flutter y vuelve a ejecutar la aplicación con el comando completo y la nueva dirección de `API_BASE_URL`.
 
 ## Volver a ejecutar el proyecto
 
@@ -303,6 +315,6 @@ Después de completar la instalación:
 1. Inicia MySQL y Apache en XAMPP.
 2. Ejecuta FastAPI desde la carpeta del backend.
 3. Abre otra terminal en `thankumusic_app`.
-4. Ejecuta el comando de Chrome o Android.
+4. Ejecuta el comando de Chrome.
 
 No necesitas volver a crear el entorno virtual cada vez que abras el proyecto. Con los servicios activos, ya puedes iniciar sesión y utilizar la aplicación.
